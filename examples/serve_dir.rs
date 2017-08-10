@@ -20,14 +20,25 @@ const TIME_TO_WAIT_ON_ERROR: u64 = 100;
 type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
-struct ErrorCodec {
-    status: Status,
+struct Codec {
 }
 
 struct Dispatcher {
 }
 
-impl<S: 'static> server::Codec<S> for ErrorCodec {
+fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
+    -> ResponseFuture<S>
+{
+    let body = format!("{} {}", status.code(), status.reason());
+    e.status(status);
+    e.add_length(body.as_bytes().len() as u64).unwrap();
+    if e.done_headers().unwrap() {
+        e.write_body(body.as_bytes());
+    }
+    Box::new(ok(e.done()))
+}
+
+impl<S: 'static> server::Codec<S> for Codec {
     type ResponseFuture = ResponseFuture<S>;
     fn recv_mode(&mut self) -> server::RecvMode {
         server::RecvMode::buffered_upfront(0)
@@ -38,27 +49,20 @@ impl<S: 'static> server::Codec<S> for ErrorCodec {
         debug_assert!(end && data.len() == 0);
         Ok(Async::Ready(0))
     }
-    fn start_response(&mut self, mut e: server::Encoder<S>)
+    fn start_response(&mut self, e: server::Encoder<S>)
         -> Self::ResponseFuture
     {
-        let body = format!("{} {}", self.status.code(), self.status.reason());
-        e.status(self.status);
-        e.add_length(body.as_bytes().len() as u64);
-        if e.done_headers().unwrap() {
-            e.write_body(body.as_bytes());
-        }
-        Box::new(ok(e.done()))
+        respond_error(Status::NotFound, e)
     }
 }
 
 impl<S: 'static> server::Dispatcher<S> for Dispatcher {
-    type Codec = Box<server::Codec<S, ResponseFuture=ResponseFuture<S>>>;
+    type Codec = Codec;
     fn headers_received(&mut self, headers: &server::Head)
         -> Result<Self::Codec, server::Error>
     {
-        Ok(Box::new(ErrorCodec {
-            status: Status::NotFound,
-        }))
+
+        Ok(Codec {})
     }
 }
 
