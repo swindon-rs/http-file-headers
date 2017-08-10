@@ -1,0 +1,27 @@
+[package]
+name = "tk-http-file"
+description = """
+    A file serving library for tk-http. Includes range requests, directory
+    indexes, symlink attacks prevention, offloading disk work to threads, etc.
+"""
+license = "MIT/Apache-2.0"
+readme = "README.rst"
+keywords = ["http", "serve", "filesystem", "file"]
+homepage = "http://github.com/swindon-rs/tk-http-file"
+documentation = "http://docs.rs/tk-http-file"
+version = "0.1.0"
+authors = ["paul@colomiets.name"]
+
+[dependencies]
+futures = "0.1.14"
+futures-cpupool = "0.1.5"
+tk-http = "0.3.0"
+log = "0.3.8"
+
+[target.'cfg(target_os="linux")'.dependencies]
+openat = "0.1.11"
+
+[dev-dependencies]
+tk-listen = "0.1.0"
+tokio-core = "0.1.9"
+env_logger = "0.4.3"
