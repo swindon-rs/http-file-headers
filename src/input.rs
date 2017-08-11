@@ -23,6 +23,7 @@ pub struct Input {
     mode: Mode,
     accept_encoding: AcceptEncoding,
     range: Vec<Range>,
+    if_range: Option<Result<SystemTime, String>>,
     if_match: Vec<String>,
     if_none: Vec<String>,
     if_unmodified: Option<SystemTime>,
