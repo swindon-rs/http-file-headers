@@ -1,7 +1,14 @@
 use std::time::SystemTime;
 
+use accept_encoding::AcceptEncodingParser;
 use {AcceptEncoding};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Head,
+    Get,
+    Invalid,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Range {
@@ -12,12 +19,43 @@ pub enum Range {
 
 #[derive(Debug, Clone)]
 pub struct Input {
+    mode: Mode,
     accept_encoding: AcceptEncoding,
     range: Vec<Range>,
     if_match: Vec<String>,
     if_none: Vec<String>,
     if_unmodified: Option<SystemTime>,
     if_modified: Option<SystemTime>,
+}
+
+impl Input {
+    pub fn from_headers<'x, I>(method: &str, headers: I) -> Input
+        where I: Iterator<Item=(&'x str, &'x[u8])>
+    {
+        let mode = match method {
+            "HEAD" => Mode::Head,
+            "GET" => Mode::Get,
+            _ => return Input {
+                mode: Mode::Invalid,
+                accept_encoding: AcceptEncoding::identity(),
+                range: Vec::new(),
+                if_match: Vec::new(),
+                if_none: Vec::new(),
+                if_unmodified: None,
+                if_modified: None,
+            },
+        };
+        let mut ae_parser = AcceptEncodingParser::new();
+        Input {
+            mode: mode,
+            accept_encoding: ae_parser.done(),
+            range: Vec::new(),
+            if_match: Vec::new(),
+            if_none: Vec::new(),
+            if_unmodified: None,
+            if_modified: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -32,6 +70,7 @@ mod test {
     #[test]
     fn traits() {
         let v = Input {
+            mode: Mode::Get,
             accept_encoding: AcceptEncodingParser::new().done(),
             range: Vec::new(),
             if_match: Vec::new(),

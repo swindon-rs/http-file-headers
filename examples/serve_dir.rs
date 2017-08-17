@@ -1,26 +1,36 @@
 extern crate futures;
+extern crate futures_cpupool;
 extern crate tk_http;
+extern crate tk_http_file;
 extern crate tk_listen;
 extern crate tokio_core;
 #[macro_use] extern crate log;
+#[macro_use] extern crate lazy_static;
 
 use std::time::Duration;
 
 use futures::{Future, Stream, Async};
 use futures::future::ok;
+use futures_cpupool::{CpuPool, CpuFuture};
 use tk_listen::ListenExt;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use tk_http::server;
 use tk_http::Status;
+use tk_http_file::Input;
 
 const MAX_SIMULTANEOUS_CONNECTIONS: usize = 500;
 const TIME_TO_WAIT_ON_ERROR: u64 = 100;
+
+lazy_static! {
+    static ref POOL: CpuPool = CpuPool::new(8);
+}
 
 type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
 struct Codec {
+    fut: CpuFuture<(), Status>,
 }
 
 struct Dispatcher {
@@ -58,11 +68,16 @@ impl<S: 'static> server::Codec<S> for Codec {
 
 impl<S: 'static> server::Dispatcher<S> for Dispatcher {
     type Codec = Codec;
-    fn headers_received(&mut self, headers: &server::Head)
+    fn headers_received(&mut self, head: &server::Head)
         -> Result<Self::Codec, server::Error>
     {
-
-        Ok(Codec {})
+        let inp = Input::from_headers(head.method(), head.headers());
+        let fut = POOL.spawn_fn(move || {
+            Ok(())
+        });
+        Ok(Codec {
+            fut: fut,
+        })
     }
 }
 

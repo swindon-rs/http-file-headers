@@ -20,8 +20,8 @@ futures = "0.1.14"
 futures-cpupool = "0.1.5"
 tk-http = "0.3.0"
 log = "0.3.8"
+lazy_static = "0.2.8"
 
 tk-listen = "0.1.0"
 tokio-core = "0.1.9"
 env_logger = "0.4.3"
-

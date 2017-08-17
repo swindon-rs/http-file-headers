@@ -50,6 +50,11 @@ impl AcceptEncoding {
             identity: false,
         }
     }
+    pub fn identity() -> AcceptEncoding {
+        AcceptEncoding {
+            ordered: [Encoding::Identity; 3],
+        }
+    }
 }
 
 impl<'a> Iterator for SuffixIter<'a> {
