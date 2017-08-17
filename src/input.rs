@@ -1,12 +1,7 @@
 use std::time::SystemTime;
 
+use {AcceptEncoding};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum AcceptEncoding {
-    Identity,
-    Gzip,
-    Brotli,
-}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Range {
@@ -17,7 +12,7 @@ pub enum Range {
 
 #[derive(Debug, Clone)]
 pub struct Input {
-    accept_encoding: [AcceptEncoding; 3],
+    accept_encoding: AcceptEncoding,
     range: Vec<Range>,
     if_match: Vec<String>,
     if_none: Vec<String>,
@@ -28,6 +23,7 @@ pub struct Input {
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
+    use accept_encoding::{AcceptEncoding, AcceptEncodingParser};
     use super::*;
 
     fn send<T: Send>(_: &T) {}
@@ -36,7 +32,7 @@ mod test {
     #[test]
     fn traits() {
         let v = Input {
-            accept_encoding: [AcceptEncoding::Identity; 3],
+            accept_encoding: AcceptEncodingParser::new().done(),
             range: Vec::new(),
             if_match: Vec::new(),
             if_none: Vec::new(),
@@ -51,6 +47,6 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Input>(), 32);
+        assert_eq!(size_of::<Input>(), 128);
     }
 }
