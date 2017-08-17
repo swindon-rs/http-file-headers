@@ -5,4 +5,4 @@ mod input;
 mod accept_encoding;
 
 pub use input::Input;
-pub use accept_encoding::AcceptEncoding;
+pub use accept_encoding::{AcceptEncoding, SuffixIter};

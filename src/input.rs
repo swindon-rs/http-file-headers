@@ -1,6 +1,7 @@
 use std::time::SystemTime;
+use std::ascii::AsciiExt;
 
-use accept_encoding::AcceptEncodingParser;
+use accept_encoding::{AcceptEncodingParser, SuffixIter};
 use {AcceptEncoding};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +47,11 @@ impl Input {
             },
         };
         let mut ae_parser = AcceptEncodingParser::new();
+        for (key, val) in headers {
+            if key.eq_ignore_ascii_case("accept-encoding") {
+                ae_parser.add_header(val);
+            }
+        }
         Input {
             mode: mode,
             accept_encoding: ae_parser.done(),
@@ -55,6 +61,9 @@ impl Input {
             if_unmodified: None,
             if_modified: None,
         }
+    }
+    pub fn suffixes(&self) -> SuffixIter {
+        self.accept_encoding.suffixes()
     }
 }
 

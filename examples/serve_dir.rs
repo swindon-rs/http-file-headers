@@ -8,6 +8,8 @@ extern crate tokio_core;
 #[macro_use] extern crate lazy_static;
 
 use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::ffi::OsString;
 
 use futures::{Future, Stream, Async};
 use futures::future::ok;
@@ -72,7 +74,17 @@ impl<S: 'static> server::Dispatcher<S> for Dispatcher {
         -> Result<Self::Codec, server::Error>
     {
         let inp = Input::from_headers(head.method(), head.headers());
+        let path = Path::new("./public").join(head.path()
+            .expect("only static requests expected") // fails on OPTIONS
+            .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
+            let mut buf = OsString::with_capacity(path.as_os_str().len());
+            for suf in inp.suffixes() {
+                buf.clear();
+                buf.push(path.as_os_str());
+                buf.push(suf);
+                println!("To Check {:?}", Path::new(&buf));
+            }
             Ok(())
         });
         Ok(Codec {

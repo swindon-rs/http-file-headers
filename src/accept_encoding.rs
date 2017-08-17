@@ -4,9 +4,9 @@ use std::slice;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Encoding {
-    Identity,
-    Gzip,
     Brotli,
+    Gzip,
+    Identity,
     #[doc(hidden)]
     __Nonexhaustive,
 }
@@ -155,7 +155,8 @@ impl AcceptEncodingParser {
         }
     }
     pub fn done(&mut self) -> AcceptEncoding {
-        self.buf.sort_by(|&(_, qa), &(_, qb)| qb.cmp(&qa));
+        self.buf.sort_by(|&(a, qa), &(b, qb)|
+            qb.cmp(&qa).then(a.cmp(&b)));
         let mut result = AcceptEncoding {
             ordered: [Encoding::Identity; 3],
         };
@@ -164,7 +165,6 @@ impl AcceptEncodingParser {
         for (i, &(e, _)) in it {
             result.ordered[i] = e;
         }
-        println!("BUF {:?} -> {:?}", self.buf, result);
         return result;
     }
 }
@@ -244,17 +244,19 @@ mod test {
 
     #[test]
     fn test_gz_br() {
-        assert_eq!(to_ext("gzip, br"), vec![".gz", ".br", ""]);
+        // same weight, brotli wins, as it compresses better
+        assert_eq!(to_ext("gzip, br"), vec![".br", ".gz", ""]);
     }
 
     #[test]
     fn test_gz_br_q() {
-        assert_eq!(to_ext("gzip;q=0.5, br"), vec![".br", ".gz", ""]);
+        assert_eq!(to_ext("gzip, br;q=0.5"), vec![".gz", ".br", ""]);
     }
     #[test]
     fn test_identity() {
         assert_eq!(to_ext("identity"), vec![""]);
-        assert_eq!(to_ext("gzip, br, identity"), vec![".gz", ".br", ""]);
-        assert_eq!(to_ext("identity, br"), vec!["", ".br"]);
+        assert_eq!(to_ext("gzip, br, identity"), vec![".br", ".gz", ""]);
+        assert_eq!(to_ext("identity, br"), vec![".br", ""]);
+        assert_eq!(to_ext("identity, br;q=0.5"), vec!["", ".br"]);
     }
 }
