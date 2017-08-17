@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::str::from_utf8;
+use std::slice;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Encoding {
@@ -22,6 +23,51 @@ pub struct AcceptEncodingParser {
     buf: Vec<(Encoding, u16 /*0..1000*/)>,
     allow_identity: bool,
     allow_any: bool,
+}
+
+/// Iterator over suffixes that match accept encoding in preferred order
+pub struct SuffixIter<'a> {
+    slice: slice::Iter<'a, Encoding>,
+    identity: bool,
+}
+
+impl Encoding {
+    pub fn suffix(&self) -> &'static str {
+        use self::Encoding::*;
+        match *self {
+            Identity => "",
+            Gzip => ".gz",
+            Brotli => ".br",
+            __Nonexhaustive => unimplemented!(),
+        }
+    }
+}
+
+impl AcceptEncoding {
+    pub fn suffixes(&self) -> SuffixIter {
+        SuffixIter {
+            slice: self.ordered.iter(),
+            identity: false,
+        }
+    }
+}
+
+impl<'a> Iterator for SuffixIter<'a> {
+    type Item = &'static str;
+    fn next(&mut self) -> Option<&'static str> {
+        loop {
+            match self.slice.next() {
+                Some(&Encoding::Identity) if !self.identity => {
+                    self.identity = true;
+                    break Some("")
+                }
+                Some(&Encoding::Identity) => {}
+                Some(&Encoding::__Nonexhaustive) => unreachable!(),
+                Some(value) => break Some(value.suffix()),
+                None => break None,
+            }
+        }
+    }
 }
 
 fn parse_q(val: Option<&[u8]>) -> Option<u16> {
@@ -104,7 +150,17 @@ impl AcceptEncodingParser {
         }
     }
     pub fn done(&mut self) -> AcceptEncoding {
-        unimplemented!();
+        self.buf.sort_by(|&(_, qa), &(_, qb)| qb.cmp(&qa));
+        let mut result = AcceptEncoding {
+            ordered: [Encoding::Identity; 3],
+        };
+        // TODO(tailhook) process disabled (q=0) encodings
+        let it = self.buf.iter().filter(|&&(_, q)| q != 0).take(3).enumerate();
+        for (i, &(e, _)) in it {
+            result.ordered[i] = e;
+        }
+        println!("BUF {:?} -> {:?}", self.buf, result);
+        return result;
     }
 }
 
@@ -152,5 +208,48 @@ mod test {
         assert_eq!(parse_q(Some(b"q=0.1")), Some(100));
         assert_eq!(parse_q(Some(b"q=0.23")), Some(230));
         assert_eq!(parse_q(Some(b"q=0.456")), Some(456));
+    }
+
+    fn to_ext(h: &str) -> Vec<&'static str> {
+        let mut parser = AcceptEncodingParser::new();
+        parser.add_header(h.as_bytes());
+        let ae = parser.done();
+        ae.suffixes().collect()
+    }
+
+    #[test]
+    fn test_norm() {
+        assert_eq!(to_ext(""), vec![""]);
+    }
+
+    #[test]
+    fn test_br() {
+        assert_eq!(to_ext("br"), vec![".br", ""]);
+    }
+
+    #[test]
+    fn test_gz() {
+        assert_eq!(to_ext("gzip"), vec![".gz", ""]);
+    }
+
+    #[test]
+    fn test_br_gz() {
+        assert_eq!(to_ext("br, gzip"), vec![".br", ".gz", ""]);
+    }
+
+    #[test]
+    fn test_gz_br() {
+        assert_eq!(to_ext("gzip, br"), vec![".gz", ".br", ""]);
+    }
+
+    #[test]
+    fn test_gz_br_q() {
+        assert_eq!(to_ext("gzip;q=0.5, br"), vec![".br", ".gz", ""]);
+    }
+    #[test]
+    fn test_identity() {
+        assert_eq!(to_ext("identity"), vec![""]);
+        assert_eq!(to_ext("gzip, br, identity"), vec![".gz", ".br", ""]);
+        assert_eq!(to_ext("identity, br"), vec!["", ".br"]);
     }
 }
