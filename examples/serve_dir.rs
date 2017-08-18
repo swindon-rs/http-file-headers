@@ -7,12 +7,14 @@ extern crate tokio_core;
 #[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 
+use std::io;
 use std::time::Duration;
 use std::path::{Path, PathBuf};
 use std::ffi::OsString;
+use std::fs::File;
 
 use futures::{Future, Stream, Async};
-use futures::future::ok;
+use futures::future::{ok, FutureResult};
 use futures_cpupool::{CpuPool, CpuFuture};
 use tk_listen::ListenExt;
 use tokio_core::net::TcpListener;
@@ -32,14 +34,14 @@ type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
 struct Codec {
-    fut: CpuFuture<(), Status>,
+    fut: Option<CpuFuture<Option<File>, Status>>,
 }
 
 struct Dispatcher {
 }
 
 fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
-    -> ResponseFuture<S>
+    -> FutureResult<server::EncoderDone<S>, server::Error>
 {
     let body = format!("{} {}", status.code(), status.reason());
     e.status(status);
@@ -47,7 +49,7 @@ fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
     if e.done_headers().unwrap() {
         e.write_body(body.as_bytes());
     }
-    Box::new(ok(e.done()))
+    ok(e.done())
 }
 
 impl<S: 'static> server::Codec<S> for Codec {
@@ -61,10 +63,29 @@ impl<S: 'static> server::Codec<S> for Codec {
         debug_assert!(end && data.len() == 0);
         Ok(Async::Ready(0))
     }
-    fn start_response(&mut self, e: server::Encoder<S>)
+    fn start_response(&mut self, mut e: server::Encoder<S>)
         -> Self::ResponseFuture
     {
-        respond_error(Status::NotFound, e)
+        Box::new(self.fut.take().unwrap().then(move |result| {
+            match result {
+                Ok(Some(f)) => {
+                    e.status(Status::Ok);
+                    // add headers
+                    if e.done_headers().unwrap() {
+                        // start writing body
+                        unimplemented!()
+                    } else {
+                        ok(e.done())
+                    }
+                }
+                Ok(None) => {
+                    respond_error(Status::NotFound, e)
+                }
+                Err(status) => {
+                    respond_error(status, e)
+                }
+            }
+        }))
     }
 }
 
@@ -78,17 +99,30 @@ impl<S: 'static> server::Dispatcher<S> for Dispatcher {
             .expect("only static requests expected") // fails on OPTIONS
             .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
+            // TODO(tailhook) move this expansion to a library
             let mut buf = OsString::with_capacity(path.as_os_str().len());
             for suf in inp.suffixes() {
                 buf.clear();
                 buf.push(path.as_os_str());
                 buf.push(suf);
-                println!("To Check {:?}", Path::new(&buf));
+                let path = Path::new(&buf);
+                match File::open(path) {
+                    Ok(f) => {
+                        println!("DONE {:?}", path);
+                        return Ok(Some(f));
+                    }
+                    Err(e) => {
+                        if e.kind() != io::ErrorKind::NotFound {
+                            error!("Error serving {:?}: {}", path, e);
+                        }
+                        continue;
+                    }
+                }
             }
-            Ok(())
+            Ok(None)
         });
         Ok(Codec {
-            fut: fut,
+            fut: Some(fut),
         })
     }
 }

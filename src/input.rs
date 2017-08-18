@@ -45,6 +45,7 @@ impl Input {
                 mode: Mode::Invalid,
                 accept_encoding: AcceptEncoding::identity(),
                 range: Vec::new(),
+                if_range: None,
                 if_match: Vec::new(),
                 if_none: Vec::new(),
                 if_unmodified: None,
@@ -61,6 +62,7 @@ impl Input {
             mode: mode,
             accept_encoding: ae_parser.done(),
             range: Vec::new(),
+            if_range: None,
             if_match: Vec::new(),
             if_none: Vec::new(),
             if_unmodified: None,
@@ -87,6 +89,7 @@ mod test {
             mode: Mode::Get,
             accept_encoding: AcceptEncodingParser::new().done(),
             range: Vec::new(),
+            if_range: None,
             if_match: Vec::new(),
             if_none: Vec::new(),
             if_unmodified: None,
@@ -100,6 +103,6 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Input>(), 128);
+        assert_eq!(size_of::<Input>(), 160);
     }
 }
