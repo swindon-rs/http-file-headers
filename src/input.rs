@@ -18,14 +18,18 @@ pub enum Range {
     Last(u64),
 }
 
+#[derive(Clone, Debug)]
+pub struct ETag {
+}
+
 #[derive(Debug, Clone)]
 pub struct Input {
     mode: Mode,
     accept_encoding: AcceptEncoding,
     range: Vec<Range>,
-    if_range: Option<Result<SystemTime, String>>,
-    if_match: Vec<String>,
-    if_none: Vec<String>,
+    if_range: Option<Result<SystemTime, ETag>>,
+    if_match: Vec<ETag>,
+    if_none: Vec<ETag>,
     if_unmodified: Option<SystemTime>,
     if_modified: Option<SystemTime>,
 }
