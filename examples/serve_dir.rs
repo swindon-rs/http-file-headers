@@ -21,7 +21,7 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use tk_http::server;
 use tk_http::Status;
-use tk_http_file::Input;
+use tk_http_file::{Input, Output};
 
 const MAX_SIMULTANEOUS_CONNECTIONS: usize = 500;
 const TIME_TO_WAIT_ON_ERROR: u64 = 100;
@@ -34,7 +34,7 @@ type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
 struct Codec {
-    fut: Option<CpuFuture<Option<File>, Status>>,
+    fut: Option<CpuFuture<Option<(File, Output)>, Status>>,
 }
 
 struct Dispatcher {
@@ -68,8 +68,12 @@ impl<S: 'static> server::Codec<S> for Codec {
     {
         Box::new(self.fut.take().unwrap().then(move |result| {
             match result {
-                Ok(Some(f)) => {
+                Ok(Some((f, outp))) => {
                     e.status(Status::Ok);
+                    e.add_length(outp.content_length()).unwrap();
+                    for (name, val) in outp.headers() {
+                        e.format_header(name, val).unwrap();
+                    }
                     // add headers
                     if e.done_headers().unwrap() {
                         // start writing body
@@ -101,15 +105,15 @@ impl<S: 'static> server::Dispatcher<S> for Dispatcher {
         let fut = POOL.spawn_fn(move || {
             // TODO(tailhook) move this expansion to a library
             let mut buf = OsString::with_capacity(path.as_os_str().len());
-            for suf in inp.suffixes() {
+            for enc in inp.encodings() {
                 buf.clear();
                 buf.push(path.as_os_str());
-                buf.push(suf);
+                buf.push(enc.suffix());
                 let path = Path::new(&buf);
-                match File::open(path) {
-                    Ok(f) => {
-                        println!("DONE {:?}", path);
-                        return Ok(Some(f));
+                match File::open(path).and_then(|f| f.metadata().map(|m| (f, m))) {
+                    Ok((f, meta)) => {
+                        let outp = inp.prepare_file(enc, &meta);
+                        return Ok(Some((f, outp)));
                     }
                     Err(e) => {
                         if e.kind() != io::ErrorKind::NotFound {

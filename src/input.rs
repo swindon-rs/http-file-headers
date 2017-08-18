@@ -1,8 +1,9 @@
 use std::time::SystemTime;
 use std::ascii::AsciiExt;
+use std::fs::Metadata;
 
-use accept_encoding::{AcceptEncodingParser, SuffixIter};
-use {AcceptEncoding};
+use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
+use {AcceptEncoding, Encoding, Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -24,14 +25,14 @@ pub struct ETag {
 
 #[derive(Debug, Clone)]
 pub struct Input {
-    mode: Mode,
-    accept_encoding: AcceptEncoding,
-    range: Vec<Range>,
-    if_range: Option<Result<SystemTime, ETag>>,
-    if_match: Vec<ETag>,
-    if_none: Vec<ETag>,
-    if_unmodified: Option<SystemTime>,
-    if_modified: Option<SystemTime>,
+    pub(crate) mode: Mode,
+    pub(crate) accept_encoding: AcceptEncoding,
+    pub(crate) range: Vec<Range>,
+    pub(crate) if_range: Option<Result<SystemTime, ETag>>,
+    pub(crate) if_match: Vec<ETag>,
+    pub(crate) if_none: Vec<ETag>,
+    pub(crate) if_unmodified: Option<SystemTime>,
+    pub(crate) if_modified: Option<SystemTime>,
 }
 
 impl Input {
@@ -69,15 +70,20 @@ impl Input {
             if_modified: None,
         }
     }
-    pub fn suffixes(&self) -> SuffixIter {
-        self.accept_encoding.suffixes()
+    pub fn encodings(&self) -> EncodingIter {
+        self.accept_encoding.iter()
+    }
+    pub fn prepare_file(&self, encoding: Encoding, metadata: &Metadata)
+        -> Output
+    {
+        Output::from_file(self, encoding, metadata)
     }
 }
 
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
-    use accept_encoding::{AcceptEncoding, AcceptEncodingParser};
+    use accept_encoding::{AcceptEncodingParser};
     use super::*;
 
     fn send<T: Send>(_: &T) {}

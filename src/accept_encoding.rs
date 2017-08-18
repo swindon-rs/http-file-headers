@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::fmt;
 use std::str::from_utf8;
 use std::slice;
 
@@ -25,8 +25,8 @@ pub struct AcceptEncodingParser {
     allow_any: bool,
 }
 
-/// Iterator over suffixes that match accept encoding in preferred order
-pub struct SuffixIter<'a> {
+/// Iterator over encodings in preferred order
+pub struct Iter<'a> {
     slice: slice::Iter<'a, Encoding>,
     identity: bool,
 }
@@ -44,8 +44,8 @@ impl Encoding {
 }
 
 impl AcceptEncoding {
-    pub fn suffixes(&self) -> SuffixIter {
-        SuffixIter {
+    pub fn iter(&self) -> Iter {
+        Iter {
             slice: self.ordered.iter(),
             identity: false,
         }
@@ -57,18 +57,18 @@ impl AcceptEncoding {
     }
 }
 
-impl<'a> Iterator for SuffixIter<'a> {
-    type Item = &'static str;
-    fn next(&mut self) -> Option<&'static str> {
+impl<'a> Iterator for Iter<'a> {
+    type Item = Encoding;
+    fn next(&mut self) -> Option<Encoding> {
         loop {
             match self.slice.next() {
                 Some(&Encoding::Identity) if !self.identity => {
                     self.identity = true;
-                    break Some("")
+                    break Some(Encoding::Identity)
                 }
                 Some(&Encoding::Identity) => {}
                 Some(&Encoding::__Nonexhaustive) => unreachable!(),
-                Some(value) => break Some(value.suffix()),
+                Some(value) => break Some(*value),
                 None => break None,
             }
         }
@@ -169,6 +169,18 @@ impl AcceptEncodingParser {
     }
 }
 
+impl fmt::Display for Encoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::Encoding::*;
+        match *self {
+            Brotli => f.write_str("br"),
+            Gzip => f.write_str("gzip"),
+            Identity => f.write_str("identity"),
+            __Nonexhaustive => unreachable!(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
@@ -219,7 +231,7 @@ mod test {
         let mut parser = AcceptEncodingParser::new();
         parser.add_header(h.as_bytes());
         let ae = parser.done();
-        ae.suffixes().collect()
+        ae.iter().map(|x| x.suffix()).collect()
     }
 
     #[test]
