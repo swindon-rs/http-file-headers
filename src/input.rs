@@ -1,6 +1,9 @@
+use std::io;
 use std::time::SystemTime;
 use std::ascii::AsciiExt;
-use std::fs::Metadata;
+use std::fs::{Metadata, File};
+use std::path::Path;
+use std::ffi::OsString;
 
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
 use {AcceptEncoding, Encoding, Output};
@@ -73,10 +76,31 @@ impl Input {
     pub fn encodings(&self) -> EncodingIter {
         self.accept_encoding.iter()
     }
-    pub fn prepare_file(&self, encoding: Encoding, metadata: &Metadata)
-        -> Output
-    {
-        Output::from_file(self, encoding, metadata)
+    /// Open files from filesystem
+    ///
+    /// **Must be run in disk thread**
+    pub fn file_at<P: AsRef<Path>>(&self, path: P) -> Option<Output> {
+        let path = path.as_ref().as_os_str();
+        let mut buf = OsString::with_capacity(path.len() + 3);
+        for enc in self.encodings() {
+            buf.clear();
+            buf.push(path);
+            buf.push(enc.suffix());
+            let path = Path::new(&buf);
+            match File::open(path).and_then(|f| f.metadata().map(|m| (f, m))) {
+                Ok((f, meta)) => {
+                    let outp = Output::from_file(self, enc, &meta, f);
+                    return Some(outp);
+                }
+                Err(e) => {
+                    if e.kind() != io::ErrorKind::NotFound {
+                        error!("Error serving {:?}: {}", path, e);
+                    }
+                    continue;
+                }
+            }
+        }
+        return None;
     }
 }
 

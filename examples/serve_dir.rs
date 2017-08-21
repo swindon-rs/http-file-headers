@@ -14,7 +14,7 @@ use std::ffi::OsString;
 use std::fs::File;
 
 use futures::{Future, Stream, Async};
-use futures::future::{ok, FutureResult};
+use futures::future::{ok, FutureResult, Either};
 use futures_cpupool::{CpuPool, CpuFuture};
 use tk_listen::ListenExt;
 use tokio_core::net::TcpListener;
@@ -77,16 +77,20 @@ impl<S: 'static> server::Codec<S> for Codec {
                     // add headers
                     if e.done_headers().unwrap() {
                         // start writing body
-                        unimplemented!()
+                        Either::B(loop_fn(outp, |outp| {
+                            POOL.spawn_fn(|| {
+                                
+                            })
+                        }))
                     } else {
-                        ok(e.done())
+                        Either::A(ok(e.done()))
                     }
                 }
                 Ok(None) => {
-                    respond_error(Status::NotFound, e)
+                    Either::A(respond_error(Status::NotFound, e))
                 }
                 Err(status) => {
-                    respond_error(status, e)
+                    Either::A(respond_error(status, e))
                 }
             }
         }))
@@ -104,26 +108,7 @@ impl<S: 'static> server::Dispatcher<S> for Dispatcher {
             .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
             // TODO(tailhook) move this expansion to a library
-            let mut buf = OsString::with_capacity(path.as_os_str().len());
-            for enc in inp.encodings() {
-                buf.clear();
-                buf.push(path.as_os_str());
-                buf.push(enc.suffix());
-                let path = Path::new(&buf);
-                match File::open(path).and_then(|f| f.metadata().map(|m| (f, m))) {
-                    Ok((f, meta)) => {
-                        let outp = inp.prepare_file(enc, &meta);
-                        return Ok(Some((f, outp)));
-                    }
-                    Err(e) => {
-                        if e.kind() != io::ErrorKind::NotFound {
-                            error!("Error serving {:?}: {}", path, e);
-                        }
-                        continue;
-                    }
-                }
-            }
-            Ok(None)
+            Ok(inp.file_at(path))
         });
         Ok(Codec {
             fut: Some(fut),

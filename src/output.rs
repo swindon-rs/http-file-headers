@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::fs::Metadata;
+use std::fs::{Metadata, File};
 
 use accept_encoding::Encoding;
 use input::{Mode, Input};
@@ -9,6 +9,7 @@ pub struct Output {
     mode: Mode,
     encoding: Encoding,
     content_length: u64,
+    file: File,
 }
 
 #[derive(Clone, Copy)]
@@ -52,13 +53,15 @@ impl<'a> Iterator for HeaderIter<'a> {
 }
 
 impl Output {
-    pub fn from_file(inp: &Input, encoding: Encoding, metadata: &Metadata)
+    pub fn from_file(inp: &Input, encoding: Encoding,
+        metadata: &Metadata, file: File)
         -> Output
     {
         Output {
             mode: inp.mode,
             encoding: encoding,
             content_length: metadata.len(),
+            file: file,
         }
     }
     pub fn content_length(&self) -> u64 {
@@ -82,11 +85,13 @@ mod test {
     fn self_contained<T: 'static>(_: &T) {}
 
     #[test]
+    #[cfg(unix)]
     fn traits() {
         let v = Output {
             mode: Mode::Get,
             encoding: Encoding::Identity,
-            content_length: 192
+            content_length: 192,
+            file: File::open("/dev/null").unwrap(),
         };
         send(&v);
         self_contained(&v);
