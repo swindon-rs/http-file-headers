@@ -74,6 +74,9 @@ impl Output {
             state: HeaderIterState::Encoding,
         }
     }
+    /// Read chunk from file into an output file
+    ///
+    /// **Must be run in disk thread**
     pub fn read_chunk<O>(&mut self, mut output: O) -> io::Result<usize>
         where O: Write
     {
