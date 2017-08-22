@@ -1,3 +1,4 @@
+use std::io::{self, Read};
 use std::fmt::Display;
 use std::fs::{Metadata, File};
 
@@ -72,6 +73,9 @@ impl Output {
             out: self,
             state: HeaderIterState::Encoding,
         }
+    }
+    pub fn read_chunk(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.file.read(buf)
     }
 }
 

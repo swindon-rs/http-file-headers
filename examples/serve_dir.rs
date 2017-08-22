@@ -4,6 +4,7 @@ extern crate tk_http;
 extern crate tk_http_file;
 extern crate tk_listen;
 extern crate tokio_core;
+extern crate tokio_io;
 #[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 
@@ -14,9 +15,10 @@ use std::ffi::OsString;
 use std::fs::File;
 
 use futures::{Future, Stream, Async};
-use futures::future::{ok, FutureResult, Either};
+use futures::future::{ok, err, FutureResult, Either, loop_fn, Loop};
 use futures_cpupool::{CpuPool, CpuFuture};
 use tk_listen::ListenExt;
+use tokio_io::AsyncWrite;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use tk_http::server;
@@ -34,7 +36,7 @@ type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
 struct Codec {
-    fut: Option<CpuFuture<Option<(File, Output)>, Status>>,
+    fut: Option<CpuFuture<Option<Output>, Status>>,
 }
 
 struct Dispatcher {
@@ -52,7 +54,24 @@ fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
     ok(e.done())
 }
 
-impl<S: 'static> server::Codec<S> for Codec {
+struct WaitFlush<S>(Option<server::Encoder<S>>);
+
+impl<S: AsyncWrite> Future for WaitFlush<S> {
+    type Item = server::Encoder<S>;
+    type Error = io::Error;
+    fn poll(&mut self) -> Result<Async<server::Encoder<S>>, io::Error> {
+        let mut e = self.0.take().unwrap();
+        e.flush()?;
+        if e.bytes_buffered() > 4096 {
+            self.0 = Some(e);
+            Ok(Async::NotReady)
+        } else {
+            Ok(Async::Ready(e))
+        }
+    }
+}
+
+impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
     type ResponseFuture = ResponseFuture<S>;
     fn recv_mode(&mut self) -> server::RecvMode {
         server::RecvMode::buffered_upfront(0)
@@ -68,7 +87,7 @@ impl<S: 'static> server::Codec<S> for Codec {
     {
         Box::new(self.fut.take().unwrap().then(move |result| {
             match result {
-                Ok(Some((f, outp))) => {
+                Ok(Some(outp)) => {
                     e.status(Status::Ok);
                     e.add_length(outp.content_length()).unwrap();
                     for (name, val) in outp.headers() {
@@ -77,9 +96,26 @@ impl<S: 'static> server::Codec<S> for Codec {
                     // add headers
                     if e.done_headers().unwrap() {
                         // start writing body
-                        Either::B(loop_fn(outp, |outp| {
-                            POOL.spawn_fn(|| {
-                                
+                        Either::B(loop_fn((e, outp), |(mut e, mut outp)| {
+                            POOL.spawn_fn(|| -> Result<Loop<_, _>, io::Error> {
+                                let mut buf = [0u8; 65536];
+                                let bytes = outp.read_chunk(&mut buf)?;
+                                if bytes == 0 {
+                                    Ok(Loop::Break(e))
+                                } else {
+                                    e.write_body(&buf[..bytes]);
+                                    Ok(Loop::Continue((e, outp)))
+                                }
+                            }).then(|res| match res {
+                                Ok(Loop::Break(e)) => {
+                                    Either::A(ok(Loop::Break(e.done())))
+                                }
+                                Ok(Loop::Continue((e, outp))) => {
+                                    Either::B(WaitFlush(Some(e)).map(|e| {
+                                        Loop::Continue((e, outp))
+                                    }).map_err(|e| server::Error::custom(e)))
+                                }
+                                Err(e) => Either::A(err(server::Error::custom(e))),
                             })
                         }))
                     } else {
@@ -97,7 +133,7 @@ impl<S: 'static> server::Codec<S> for Codec {
     }
 }
 
-impl<S: 'static> server::Dispatcher<S> for Dispatcher {
+impl<S: AsyncWrite + Send + 'static> server::Dispatcher<S> for Dispatcher {
     type Codec = Codec;
     fn headers_received(&mut self, head: &server::Head)
         -> Result<Self::Codec, server::Error>
@@ -107,7 +143,6 @@ impl<S: 'static> server::Dispatcher<S> for Dispatcher {
             .expect("only static requests expected") // fails on OPTIONS
             .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
-            // TODO(tailhook) move this expansion to a library
             Ok(inp.file_at(path))
         });
         Ok(Codec {
