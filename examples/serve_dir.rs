@@ -80,26 +80,17 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                     if e.done_headers().unwrap() {
                         // start writing body
                         Either::B(loop_fn((e, outp), |(mut e, mut outp)| {
-                            POOL.spawn_fn(|| -> Result<Loop<_, _>, io::Error> {
-                                let mut buf = [0u8; 65536];
-                                let bytes = outp.read_chunk(&mut buf)?;
-                                if bytes == 0 {
-                                    Ok(Loop::Break(e))
+                            POOL.spawn_fn(move || {
+                                outp.read_chunk(&mut e).map(|b| (b, e, outp))
+                            }).and_then(|(b, e, outp)| {
+                                e.wait_flush(4096).map(move |e| (b, e, outp))
+                            }).map(|(b, e, outp)| {
+                                if b == 0 {
+                                    Loop::Break(e.done())
                                 } else {
-                                    e.write_body(&buf[..bytes]);
-                                    Ok(Loop::Continue((e, outp)))
+                                    Loop::Continue((e, outp))
                                 }
-                            }).then(|res| match res {
-                                Ok(Loop::Break(e)) => {
-                                    Either::A(ok(Loop::Break(e.done())))
-                                }
-                                Ok(Loop::Continue((e, outp))) => {
-                                    Either::B(e.wait_flush(4096).map(|e| {
-                                        Loop::Continue((e, outp))
-                                    }).map_err(|e| server::Error::custom(e)))
-                                }
-                                Err(e) => Either::A(err(server::Error::custom(e))),
-                            })
+                            }).map_err(|e| server::Error::custom(e))
                         }))
                     } else {
                         Either::A(ok(e.done()))

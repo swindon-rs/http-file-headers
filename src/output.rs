@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::fmt::Display;
 use std::fs::{Metadata, File};
 
@@ -74,8 +74,16 @@ impl Output {
             state: HeaderIterState::Encoding,
         }
     }
-    pub fn read_chunk(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.file.read(buf)
+    pub fn read_chunk<O>(&mut self, mut output: O) -> io::Result<usize>
+        where O: Write
+    {
+        let mut buf = [0u8; 65536];
+        let bytes = self.file.read(&mut buf)?;
+        // TODO(tailhook) rewind or poison this file on error
+        let wbytes = output.write(&buf[..bytes])?;
+        // TODO(tailhook) rewind file on less bytes
+        assert_eq!(wbytes, bytes);
+        Ok(wbytes)
     }
 }
 
