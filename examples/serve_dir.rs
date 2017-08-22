@@ -54,23 +54,6 @@ fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
     ok(e.done())
 }
 
-struct WaitFlush<S>(Option<server::Encoder<S>>);
-
-impl<S: AsyncWrite> Future for WaitFlush<S> {
-    type Item = server::Encoder<S>;
-    type Error = io::Error;
-    fn poll(&mut self) -> Result<Async<server::Encoder<S>>, io::Error> {
-        let mut e = self.0.take().unwrap();
-        e.flush()?;
-        if e.bytes_buffered() > 4096 {
-            self.0 = Some(e);
-            Ok(Async::NotReady)
-        } else {
-            Ok(Async::Ready(e))
-        }
-    }
-}
-
 impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
     type ResponseFuture = ResponseFuture<S>;
     fn recv_mode(&mut self) -> server::RecvMode {
@@ -111,7 +94,7 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                                     Either::A(ok(Loop::Break(e.done())))
                                 }
                                 Ok(Loop::Continue((e, outp))) => {
-                                    Either::B(WaitFlush(Some(e)).map(|e| {
+                                    Either::B(e.wait_flush(4096).map(|e| {
                                         Loop::Continue((e, outp))
                                     }).map_err(|e| server::Error::custom(e)))
                                 }

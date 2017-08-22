@@ -19,7 +19,7 @@ log = "0.3.8"
 [dev-dependencies]
 futures = "0.1.14"
 futures-cpupool = "0.1.5"
-tk-http = { rev="59cb4d3", git="https://github.com/swindon-rs/tk-http" }
+tk-http = { rev="cd33594", git="https://github.com/swindon-rs/tk-http" }
 lazy_static = "0.2.8"
 
 tk-listen = "0.1.0"
