@@ -5,17 +5,13 @@ extern crate tk_http_file;
 extern crate tk_listen;
 extern crate tokio_core;
 extern crate tokio_io;
-#[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 
-use std::io;
 use std::time::Duration;
-use std::path::{Path, PathBuf};
-use std::ffi::OsString;
-use std::fs::File;
+use std::path::{Path};
 
 use futures::{Future, Stream, Async};
-use futures::future::{ok, err, FutureResult, Either, loop_fn, Loop};
+use futures::future::{ok, FutureResult, Either, loop_fn, Loop};
 use futures_cpupool::{CpuPool, CpuFuture};
 use tk_listen::ListenExt;
 use tokio_io::AsyncWrite;
@@ -137,7 +133,7 @@ fn main() {
     lp.run(
         listener.incoming()
         .sleep_on_error(Duration::from_millis(TIME_TO_WAIT_ON_ERROR), &h1)
-        .map(move |(mut socket, _addr)| {
+        .map(move |(socket, _addr)| {
             server::Proto::new(socket, &cfg, Dispatcher {}, &h1)
             .map_err(|e| { println!("Connection error: {}", e); })
         })

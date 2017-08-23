@@ -1,12 +1,12 @@
 use std::io;
 use std::time::SystemTime;
 use std::ascii::AsciiExt;
-use std::fs::{Metadata, File};
+use std::fs::{File};
 use std::path::Path;
 use std::ffi::OsString;
 
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
-use {AcceptEncoding, Encoding, Output};
+use {AcceptEncoding, Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
