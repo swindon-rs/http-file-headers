@@ -1,6 +1,7 @@
 //#[warn(missing_docs)]
 #![allow(dead_code)]
 
+extern crate httpdate;
 #[macro_use] extern crate log;
 
 mod input;

@@ -1,21 +1,36 @@
 use std::io::{self, Read, Write};
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::fs::{Metadata, File};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+
+use httpdate::fmt_http_date;
 
 use accept_encoding::Encoding;
 use input::{Mode, Input};
 
+/// This is a heuristic that there are no valid dates before 1990-01-01
+/// Lower timestamps like 1970-01-01 00:00:01 are used by nixos and some
+/// other systems to denote that there is no sensible modification time.
+/// Even more zip archives clamp that dates to 1980-01-01.
+///
+/// All in all we use 1990-01-01 as the minimal date that considered valid,
+/// as we don't think anybody serves files with lower date set genuinely.
+const MIN_DATE: u64 = 631152000;
+
+struct LastModified(SystemTime);
 
 pub struct Output {
     mode: Mode,
     encoding: Encoding,
     content_length: u64,
+    last_modified: Option<LastModified>,
     file: File,
 }
 
 #[derive(Clone, Copy)]
 enum HeaderIterState {
     Encoding,
+    LastModified,
     Done,
 }
 
@@ -39,10 +54,15 @@ impl<'a> Iterator for HeaderIter<'a> {
                         None
                     }
                 }
+                H::LastModified => {
+                    self.out.last_modified.as_ref()
+                        .and_then(|x| Some(("Last-Modified", x as &Display)))
+                }
                 H::Done => None,
             };
             self.state = match self.state {
-                H::Encoding => H::Done,
+                H::Encoding => H::LastModified,
+                H::LastModified => H::Done,
                 H::Done => return None,
             };
             match value {
@@ -58,10 +78,17 @@ impl Output {
         metadata: &Metadata, file: File)
         -> Output
     {
+        let mod_time = metadata.modified().ok()
+            .and_then(|x| if x < UNIX_EPOCH + Duration::new(MIN_DATE, 0) {
+                None
+            } else {
+                Some(x)
+            });
         Output {
             mode: inp.mode,
             encoding: encoding,
             content_length: metadata.len(),
+            last_modified: mod_time.map(LastModified),
             file: file,
         }
     }
@@ -90,6 +117,12 @@ impl Output {
     }
 }
 
+impl fmt::Display for LastModified {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&fmt_http_date(self.0))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
@@ -106,6 +139,7 @@ mod test {
             mode: Mode::Get,
             encoding: Encoding::Identity,
             content_length: 192,
+            last_modified: None,
             file: File::open("/dev/null").unwrap(),
         };
         send(&v);
@@ -115,6 +149,6 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Output>(), 16);
+        assert_eq!(size_of::<Output>(), 40);
     }
 }
