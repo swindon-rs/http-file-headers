@@ -14,7 +14,8 @@ use {AcceptEncoding, Output};
 pub enum Mode {
     Head,
     Get,
-    Invalid,
+    InvalidMethod,
+    InvalidRange,
 }
 
 #[derive(Debug, Clone)]
@@ -37,7 +38,7 @@ impl Input {
             "HEAD" => Mode::Head,
             "GET" => Mode::Get,
             _ => return Input {
-                mode: Mode::Invalid,
+                mode: Mode::InvalidMethod,
                 accept_encoding: AcceptEncoding::identity(),
                 range: None,
                 if_range: None,
@@ -56,10 +57,23 @@ impl Input {
                 range_parser.add_header(val);
             }
         }
+        let range = match range_parser.done() {
+            Ok(range) => range,
+            Err(()) => return Input {
+                mode: Mode::InvalidRange,
+                accept_encoding: AcceptEncoding::identity(),
+                range: None,
+                if_range: None,
+                if_match: Vec::new(),
+                if_none: Vec::new(),
+                if_unmodified: None,
+                if_modified: None,
+            },
+        };
         Input {
             mode: mode,
             accept_encoding: ae_parser.done(),
-            range: range_parser.done().unwrap(), // TODO(tailhook)
+            range: range,
             if_range: None,
             if_match: Vec::new(),
             if_none: Vec::new(),
@@ -74,6 +88,7 @@ impl Input {
     ///
     /// **Must be run in disk thread**
     pub fn file_at<P: AsRef<Path>>(&self, path: P) -> Option<Output> {
+        println!("Mode {:?}", self.mode);
         let path = path.as_ref().as_os_str();
         let mut buf = OsString::with_capacity(path.len() + 3);
         for enc in self.encodings() {
