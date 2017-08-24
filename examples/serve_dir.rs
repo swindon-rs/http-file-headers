@@ -68,7 +68,11 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
         Box::new(self.fut.take().unwrap().then(move |result| {
             match result {
                 Ok(Output::File(outf)) | Ok(Output::FileRange(outf)) => {
-                    e.status(Status::Ok);
+                    if outf.is_partial() {
+                        e.status(Status::PartialContent);
+                    } else {
+                        e.status(Status::Ok);
+                    }
                     e.add_length(outf.content_length()).unwrap();
                     for (name, val) in outf.headers() {
                         e.format_header(name, val).unwrap();
@@ -94,7 +98,11 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                     }
                 }
                 Ok(Output::FileHead(head)) => {
-                    e.status(Status::Ok);
+                    if head.is_partial() {
+                        e.status(Status::PartialContent);
+                    } else {
+                        e.status(Status::Ok);
+                    }
                     e.add_length(head.content_length()).unwrap();
                     for (name, val) in head.headers() {
                         e.format_header(name, val).unwrap();

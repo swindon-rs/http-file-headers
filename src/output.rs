@@ -118,6 +118,9 @@ impl<'a> Iterator for HeaderIter<'a> {
 }
 
 impl Head {
+    pub fn is_partial(&self) -> bool {
+        self.range.is_some()
+    }
     pub(crate) fn from_meta(inp: &Input, encoding: Encoding,
         metadata: &Metadata)
         -> Result<Head, Output>
@@ -208,6 +211,9 @@ impl FileWrapper {
             file: file,
             bytes_left: nbytes,
         })
+    }
+    pub fn is_partial(&self) -> bool {
+        self.head.range.is_some()
     }
     pub fn content_length(&self) -> u64 {
         self.head.content_length
