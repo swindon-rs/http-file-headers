@@ -18,6 +18,9 @@ use etag::Etag;
 /// as we don't think anybody serves files with lower date set genuinely.
 const MIN_DATE: u64 = 631152000;
 
+const BYTES: &str = "bytes";
+const BYTES_PTR: &&str = &BYTES;
+
 struct LastModified(SystemTime);
 
 pub struct Output {
@@ -34,6 +37,7 @@ enum HeaderIterState {
     Encoding,
     LastModified,
     Etag,
+    AcceptRanges,
     Done,
 }
 
@@ -64,12 +68,16 @@ impl<'a> Iterator for HeaderIter<'a> {
                 H::Etag => {
                     Some(("Etag", &self.out.etag as &Display))
                 }
+                H::AcceptRanges => {
+                    Some(("Accept-Ranges", BYTES_PTR as &Display))
+                }
                 H::Done => None,
             };
             self.state = match self.state {
                 H::Encoding => H::LastModified,
                 H::LastModified => H::Etag,
-                H::Etag => H::Done,
+                H::Etag => H::AcceptRanges,
+                H::AcceptRanges => H::Done,
                 H::Done => return None,
             };
             match value {
