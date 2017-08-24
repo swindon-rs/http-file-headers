@@ -91,21 +91,21 @@ impl Slice {
 
 fn parse_header(header: &[u8]) -> Result<Range, ()> {
     let header = from_utf8(header).map_err(|_| {
-        debug!("Invalid utf-8 in range header");
+        // Invalid utf-8 in range header
     })?;
     if !header.starts_with("bytes=") {
-        debug!("Invalid unit in range header");
+        // Invalid unit in range header
         return Err(());
     }
     let mut slices = header[6..].split(",");
     let slice = slices.next()
         .ok_or_else(|| {
-            debug!("Empty range header");
+            // Empty range header
         })?;
     let mut slice = parse_slice(slice)?;
     for item in slices {
         if !slice.merge(parse_slice(item)?) {
-            debug!("Can't merge two ranges");
+            // Can't merge two ranges
             return Err(());
         }
     }
@@ -122,7 +122,7 @@ impl RangeParser {
         match self.result {
             Err(()) => {}
             ref mut r @ Ok(Some(_)) => {
-                debug!("Duplicate range header");
+                // Duplicate range header
                 *r = Err(());
             }
             ref mut r @ Ok(None) => {

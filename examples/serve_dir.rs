@@ -5,6 +5,7 @@ extern crate tk_http_file;
 extern crate tk_listen;
 extern crate tokio_core;
 extern crate tokio_io;
+#[macro_use] extern crate log;
 #[macro_use] extern crate lazy_static;
 
 use std::time::Duration;
@@ -32,7 +33,7 @@ type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
                                    Error=server::Error>>;
 
 struct Codec {
-    fut: Option<CpuFuture<Option<Output>, Status>>,
+    fut: Option<CpuFuture<Output, Status>>,
 }
 
 struct Dispatcher {
@@ -66,25 +67,25 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
     {
         Box::new(self.fut.take().unwrap().then(move |result| {
             match result {
-                Ok(Some(outp)) => {
+                Ok(Output::File(outf)) | Ok(Output::FileRange(outf)) => {
                     e.status(Status::Ok);
-                    e.add_length(outp.content_length()).unwrap();
-                    for (name, val) in outp.headers() {
+                    e.add_length(outf.content_length()).unwrap();
+                    for (name, val) in outf.headers() {
                         e.format_header(name, val).unwrap();
                     }
                     // add headers
                     if e.done_headers().unwrap() {
                         // start writing body
-                        Either::B(loop_fn((e, outp), |(mut e, mut outp)| {
+                        Either::B(loop_fn((e, outf), |(mut e, mut outf)| {
                             POOL.spawn_fn(move || {
-                                outp.read_chunk(&mut e).map(|b| (b, e, outp))
-                            }).and_then(|(b, e, outp)| {
-                                e.wait_flush(4096).map(move |e| (b, e, outp))
-                            }).map(|(b, e, outp)| {
+                                outf.read_chunk(&mut e).map(|b| (b, e, outf))
+                            }).and_then(|(b, e, outf)| {
+                                e.wait_flush(4096).map(move |e| (b, e, outf))
+                            }).map(|(b, e, outf)| {
                                 if b == 0 {
                                     Loop::Break(e.done())
                                 } else {
-                                    Loop::Continue((e, outp))
+                                    Loop::Continue((e, outf))
                                 }
                             }).map_err(|e| server::Error::custom(e))
                         }))
@@ -92,7 +93,24 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                         Either::A(ok(e.done()))
                     }
                 }
-                Ok(None) => {
+                Ok(Output::FileHead(head)) => {
+                    e.status(Status::Ok);
+                    e.add_length(head.content_length()).unwrap();
+                    for (name, val) in head.headers() {
+                        e.format_header(name, val).unwrap();
+                    }
+                    assert_eq!(e.done_headers().unwrap(), false);
+                    Either::A(ok(e.done()))
+                }
+                Ok(Output::InvalidRange) => {
+                    Either::A(respond_error(
+                        Status::RequestRangeNotSatisfiable, e))
+                }
+                Ok(Output::InvalidMethod) => {
+                    Either::A(respond_error(
+                        Status::MethodNotAllowed, e))
+                }
+                Ok(Output::NotFound) | Ok(Output::Directory) => {
                     Either::A(respond_error(Status::NotFound, e))
                 }
                 Err(status) => {
@@ -113,7 +131,10 @@ impl<S: AsyncWrite + Send + 'static> server::Dispatcher<S> for Dispatcher {
             .expect("only static requests expected") // fails on OPTIONS
             .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
-            Ok(inp.file_at(path))
+            inp.probe_file(&path).map_err(|e| {
+                error!("Error reading file {:?}: {}", path, e);
+                Status::InternalServerError
+            })
         });
         Ok(Codec {
             fut: Some(fut),

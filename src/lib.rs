@@ -8,7 +8,6 @@ extern crate digest_writer;
 extern crate generic_array;
 extern crate httpdate;
 extern crate typenum;
-#[macro_use] extern crate log;
 
 mod etag;
 mod input;

@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
 use range::{Range, RangeParser};
 use etag::Etag;
+use output::{Head, FileWrapper};
 use {AcceptEncoding, Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,8 +88,14 @@ impl Input {
     /// Open files from filesystem
     ///
     /// **Must be run in disk thread**
-    pub fn file_at<P: AsRef<Path>>(&self, path: P) -> Option<Output> {
-        println!("Mode {:?}", self.mode);
+    pub fn probe_file<P: AsRef<Path>>(&self, path: P)
+        -> Result<Output, io::Error>
+    {
+        match self.mode {
+            Mode::Head | Mode::Get => {}
+            Mode::InvalidMethod => return Ok(Output::InvalidMethod),
+            Mode::InvalidRange => return Ok(Output::InvalidRange),
+        }
         let path = path.as_ref().as_os_str();
         let mut buf = OsString::with_capacity(path.len() + 3);
         for enc in self.encodings() {
@@ -98,18 +105,30 @@ impl Input {
             let path = Path::new(&buf);
             match File::open(path).and_then(|f| f.metadata().map(|m| (f, m))) {
                 Ok((f, meta)) => {
-                    let outp = Output::from_file(self, enc, &meta, f);
-                    return Some(outp);
-                }
-                Err(e) => {
-                    if e.kind() != io::ErrorKind::NotFound {
-                        error!("Error serving {:?}: {}", path, e);
+                    if meta.is_dir() {
+                        return Ok(Output::Directory);
                     }
+                    let head = match Head::from_meta(self, enc, &meta) {
+                        Err(output) => return Ok(output),
+                        Ok(head) => head,
+                    };
+                    match self.mode {
+                        Mode::InvalidMethod => unreachable!(),
+                        Mode::InvalidRange => unreachable!(),
+                        Mode::Head => return Ok(Output::FileHead(head)),
+                        Mode::Get => {
+                            return Ok(Output::File(
+                                FileWrapper::new(head, f)?));
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                     continue;
                 }
+                Err(e) => return Err(e),
             }
         }
-        return None;
+        return Ok(Output::NotFound);
     }
 }
 
