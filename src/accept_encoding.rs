@@ -154,7 +154,7 @@ impl AcceptEncodingParser {
             self.add_chunk(chunk)
         }
     }
-    pub fn done(&mut self) -> AcceptEncoding {
+    pub fn done(mut self) -> AcceptEncoding {
         self.buf.sort_by(|&(a, qa), &(b, qb)|
             qb.cmp(&qa).then(a.cmp(&b)));
         let mut result = AcceptEncoding {

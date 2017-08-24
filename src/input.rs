@@ -6,6 +6,8 @@ use std::path::Path;
 use std::ffi::OsString;
 
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
+use range::{Range, RangeParser};
+use etag::Etag;
 use {AcceptEncoding, Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,25 +17,14 @@ pub enum Mode {
     Invalid,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Range {
-    FromTo(u64, u64),
-    AllFrom(u64),
-    Last(u64),
-}
-
-#[derive(Clone, Debug)]
-pub struct ETag {
-}
-
 #[derive(Debug, Clone)]
 pub struct Input {
     pub(crate) mode: Mode,
     pub(crate) accept_encoding: AcceptEncoding,
-    pub(crate) range: Vec<Range>,
-    pub(crate) if_range: Option<Result<SystemTime, ETag>>,
-    pub(crate) if_match: Vec<ETag>,
-    pub(crate) if_none: Vec<ETag>,
+    pub(crate) range: Option<Range>,
+    pub(crate) if_range: Option<Result<SystemTime, Etag>>,
+    pub(crate) if_match: Vec<Etag>,
+    pub(crate) if_none: Vec<Etag>,
     pub(crate) if_unmodified: Option<SystemTime>,
     pub(crate) if_modified: Option<SystemTime>,
 }
@@ -48,7 +39,7 @@ impl Input {
             _ => return Input {
                 mode: Mode::Invalid,
                 accept_encoding: AcceptEncoding::identity(),
-                range: Vec::new(),
+                range: None,
                 if_range: None,
                 if_match: Vec::new(),
                 if_none: Vec::new(),
@@ -57,15 +48,18 @@ impl Input {
             },
         };
         let mut ae_parser = AcceptEncodingParser::new();
+        let mut range_parser = RangeParser::new();
         for (key, val) in headers {
             if key.eq_ignore_ascii_case("accept-encoding") {
                 ae_parser.add_header(val);
+            } else if key.eq_ignore_ascii_case("range") {
+                range_parser.add_header(val);
             }
         }
         Input {
             mode: mode,
             accept_encoding: ae_parser.done(),
-            range: Vec::new(),
+            range: range_parser.done().unwrap(), // TODO(tailhook)
             if_range: None,
             if_match: Vec::new(),
             if_none: Vec::new(),
@@ -118,7 +112,7 @@ mod test {
         let v = Input {
             mode: Mode::Get,
             accept_encoding: AcceptEncodingParser::new().done(),
-            range: Vec::new(),
+            range: None,
             if_range: None,
             if_match: Vec::new(),
             if_none: Vec::new(),
@@ -133,6 +127,6 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Input>(), 160);
+        assert_eq!(size_of::<Input>(), 168);
     }
 }

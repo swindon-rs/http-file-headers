@@ -10,6 +10,7 @@ use typenum::U12;
 use byteorder::{WriteBytesExt, BigEndian};
 
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Etag([u8; 12]);
 
 
