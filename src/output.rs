@@ -7,6 +7,7 @@ use httpdate::fmt_http_date;
 
 use accept_encoding::Encoding;
 use input::{Mode, Input};
+use etag::Etag;
 
 /// This is a heuristic that there are no valid dates before 1990-01-01
 /// Lower timestamps like 1970-01-01 00:00:01 are used by nixos and some
@@ -24,6 +25,7 @@ pub struct Output {
     encoding: Encoding,
     content_length: u64,
     last_modified: Option<LastModified>,
+    etag: Etag,
     file: File,
 }
 
@@ -31,6 +33,7 @@ pub struct Output {
 enum HeaderIterState {
     Encoding,
     LastModified,
+    Etag,
     Done,
 }
 
@@ -58,11 +61,15 @@ impl<'a> Iterator for HeaderIter<'a> {
                     self.out.last_modified.as_ref()
                         .and_then(|x| Some(("Last-Modified", x as &Display)))
                 }
+                H::Etag => {
+                    Some(("Etag", &self.out.etag as &Display))
+                }
                 H::Done => None,
             };
             self.state = match self.state {
                 H::Encoding => H::LastModified,
-                H::LastModified => H::Done,
+                H::LastModified => H::Etag,
+                H::Etag => H::Done,
                 H::Done => return None,
             };
             match value {
@@ -89,6 +96,7 @@ impl Output {
             encoding: encoding,
             content_length: metadata.len(),
             last_modified: mod_time.map(LastModified),
+            etag: Etag::from_metadata(metadata),
             file: file,
         }
     }
@@ -135,12 +143,14 @@ mod test {
     #[test]
     #[cfg(unix)]
     fn traits() {
+        let f = File::open("/dev/null").unwrap();
         let v = Output {
             mode: Mode::Get,
             encoding: Encoding::Identity,
             content_length: 192,
             last_modified: None,
-            file: File::open("/dev/null").unwrap(),
+            etag: Etag::from_metadata(&f.metadata().unwrap()),
+            file: f,
         };
         send(&v);
         self_contained(&v);
@@ -149,6 +159,6 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Output>(), 40);
+        assert_eq!(size_of::<Output>(), 56);
     }
 }
