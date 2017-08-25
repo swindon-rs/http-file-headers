@@ -28,6 +28,7 @@ struct LastModified(SystemTime);
 pub enum Output {
     NotFound,
     FileHead(Head),
+    NotModified(Head),
     File(FileWrapper),
     FileRange(FileWrapper),
     Directory,
@@ -41,6 +42,7 @@ pub struct Head {
     last_modified: Option<LastModified>,
     etag: Etag,
     range: Option<ContentRange>,
+    not_modified: bool,
 }
 
 pub struct ContentRange {
@@ -57,11 +59,14 @@ pub struct FileWrapper {
 
 #[derive(Clone, Copy)]
 enum HeaderIterState {
-    Encoding,
     LastModified,
     Etag,
-    ContentRange,
+
+    // these three not needed if NotModified
+    Encoding,
     AcceptRanges,
+    ContentRange,
+
     Done,
 }
 
@@ -77,6 +82,13 @@ impl<'a> Iterator for HeaderIter<'a> {
         use self::HeaderIterState as H;
         loop {
             let value = match self.state {
+                H::LastModified => {
+                    self.head.last_modified.as_ref()
+                        .map(|x| ("Last-Modified", x as &Display))
+                }
+                H::Etag => {
+                    Some(("ETag", &self.head.etag as &Display))
+                }
                 H::Encoding => {
                     if self.head.encoding != Encoding::Identity {
                         Some(("Content-Encoding",
@@ -84,13 +96,6 @@ impl<'a> Iterator for HeaderIter<'a> {
                     } else {
                         None
                     }
-                }
-                H::LastModified => {
-                    self.head.last_modified.as_ref()
-                        .map(|x| ("Last-Modified", x as &Display))
-                }
-                H::Etag => {
-                    Some(("Etag", &self.head.etag as &Display))
                 }
                 H::ContentRange => {
                     self.head.range.as_ref()
@@ -102,11 +107,12 @@ impl<'a> Iterator for HeaderIter<'a> {
                 H::Done => None,
             };
             self.state = match self.state {
-                H::Encoding => H::LastModified,
                 H::LastModified => H::Etag,
-                H::Etag => H::ContentRange,
-                H::ContentRange => H::AcceptRanges,
-                H::AcceptRanges => H::Done,
+                H::Etag if self.head.not_modified => H::Done,
+                H::Etag => H::Encoding,
+                H::Encoding => H::AcceptRanges,
+                H::AcceptRanges => H::ContentRange,
+                H::ContentRange => H::Done,
                 H::Done => return None,
             };
             match value {
@@ -121,6 +127,9 @@ impl Head {
     pub fn is_partial(&self) -> bool {
         self.range.is_some()
     }
+    pub fn is_not_modified(&self) -> bool {
+        self.not_modified
+    }
     pub(crate) fn from_meta(inp: &Input, encoding: Encoding,
         metadata: &Metadata)
         -> Result<Head, Output>
@@ -132,6 +141,19 @@ impl Head {
                 Some(x)
             });
         let size = metadata.len();
+        let etag = Etag::from_metadata(metadata);
+        if inp.if_none.len() > 0 {
+            if inp.if_none.iter().any(|x| x == &etag) {
+                return Err(Output::NotModified(Head {
+                    encoding: encoding,
+                    content_length: 0,
+                    last_modified: mod_time.map(LastModified),
+                    etag: etag,
+                    range: None,
+                    not_modified: true,
+                }))
+            }
+        }
         let range = match inp.range {
             Some(Range::SingleRangeOfBytes(Slice::FromTo(s, e))) => {
                 if s >= size {
@@ -179,8 +201,9 @@ impl Head {
             encoding: encoding,
             content_length: clen,
             last_modified: mod_time.map(LastModified),
-            etag: Etag::from_metadata(metadata),
+            etag: etag,
             range: range,
+            not_modified: false,
         })
     }
     pub fn content_length(&self) -> u64 {
@@ -189,7 +212,7 @@ impl Head {
     pub fn headers(&self) -> HeaderIter {
         HeaderIter {
             head: self,
-            state: HeaderIterState::Encoding,
+            state: HeaderIterState::LastModified,
         }
     }
 }

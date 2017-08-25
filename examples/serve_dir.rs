@@ -97,13 +97,16 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                         Either::A(ok(e.done()))
                     }
                 }
-                Ok(Output::FileHead(head)) => {
-                    if head.is_partial() {
+                Ok(Output::FileHead(head)) | Ok(Output::NotModified(head)) => {
+                    if head.is_not_modified() {
+                        e.status(Status::NotModified);
+                    } else if head.is_partial() {
                         e.status(Status::PartialContent);
+                        e.add_length(head.content_length()).unwrap();
                     } else {
                         e.status(Status::Ok);
+                        e.add_length(head.content_length()).unwrap();
                     }
-                    e.add_length(head.content_length()).unwrap();
                     for (name, val) in head.headers() {
                         e.format_header(name, val).unwrap();
                     }
