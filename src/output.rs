@@ -267,7 +267,11 @@ impl Head {
             config: inp.config.clone(),
             encoding: encoding,
             content_length: clen,
-            content_type: Some(ContentType(ctype, inp.config.clone())),
+            content_type: if inp.config.content_type {
+                Some(ContentType(ctype, inp.config.clone()))
+            } else {
+                None
+            },
             last_modified: mod_time.map(LastModified),
             etag: etag,
             range: range,
