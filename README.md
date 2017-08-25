@@ -22,8 +22,8 @@ it's usage is quite verbose (see [example][1]). Still it does most of the
 complex work internally and is easily adapted to different needs.
 
 Here are just few things that [example in < 200 LoCs][1] shows:
-
-1. [Tokio](https://tokio.rs] asynchronous stuff
+ 
+1. [Tokio](https://tokio.rs) for asynchronous stuff
 2. [Tk-http](https://github.com/swindon-rs/tk-http) serving HTTP
 3. [Futures-cpupool](https://crates.io/crates/futures-cpupool) for
     offloading reading from disk into separate thread pool
