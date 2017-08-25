@@ -1,10 +1,12 @@
 use std::cmp::min;
-use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::fmt::{self, Display};
 use std::fs::{Metadata, File};
+use std::io::{self, Read, Write, Seek, SeekFrom};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 use httpdate::fmt_http_date;
+use mime_guess::get_mime_type_str;
 
 use accept_encoding::Encoding;
 use input::{Input};
@@ -39,6 +41,7 @@ pub enum Output {
 pub struct Head {
     encoding: Encoding,
     content_length: u64,
+    content_type: Option<&'static str>,
     last_modified: Option<LastModified>,
     etag: Etag,
     range: Option<ContentRange>,
@@ -62,10 +65,11 @@ enum HeaderIterState {
     LastModified,
     Etag,
 
-    // these three not needed if NotModified
+    // these not needed if NotModified
     Encoding,
     AcceptRanges,
     ContentRange,
+    ContentType,
 
     Done,
 }
@@ -101,6 +105,10 @@ impl<'a> Iterator for HeaderIter<'a> {
                     self.head.range.as_ref()
                         .map(|x| ("Content-Range", x as &Display))
                 }
+                H::ContentType => {
+                    self.head.content_type.as_ref()
+                        .map(|x| ("Content-Type", x as &Display))
+                }
                 H::AcceptRanges => {
                     Some(("Accept-Ranges", BYTES_PTR as &Display))
                 }
@@ -112,7 +120,8 @@ impl<'a> Iterator for HeaderIter<'a> {
                 H::Etag => H::Encoding,
                 H::Encoding => H::AcceptRanges,
                 H::AcceptRanges => H::ContentRange,
-                H::ContentRange => H::Done,
+                H::ContentRange => H::ContentType,
+                H::ContentType => H::Done,
                 H::Done => return None,
             };
             match value {
@@ -131,7 +140,7 @@ impl Head {
         self.not_modified
     }
     pub(crate) fn from_meta(inp: &Input, encoding: Encoding,
-        metadata: &Metadata)
+        metadata: &Metadata, path: &Path)
         -> Result<Head, Output>
     {
         let mod_time = metadata.modified().ok()
@@ -146,7 +155,8 @@ impl Head {
             if inp.if_none.iter().any(|x| x == &etag) {
                 return Err(Output::NotModified(Head {
                     encoding: encoding,
-                    content_length: 0,
+                    content_length: 0, // don't need to send
+                    content_type: None, // don't need to send
                     last_modified: mod_time.map(LastModified),
                     etag: etag,
                     range: None,
@@ -157,7 +167,8 @@ impl Head {
             if mod_time.as_ref().map(|x| last_mod <= x).unwrap_or(false) {
                 return Err(Output::NotModified(Head {
                     encoding: encoding,
-                    content_length: 0,
+                    content_length: 0, // don't need to send
+                    content_type: None, // don't need to send
                     last_modified: mod_time.map(LastModified),
                     etag: etag,
                     range: None,
@@ -208,9 +219,14 @@ impl Head {
             Some(ref rng) => rng.end - rng.start + 1,
             None => size,
         };
+        let ctype = path.extension()
+            .and_then(|x| x.to_str())
+            .and_then(|x| get_mime_type_str(x))
+            .unwrap_or("application/octed-stream");
         Ok(Head {
             encoding: encoding,
             content_length: clen,
+            content_type: Some(ctype),
             last_modified: mod_time.map(LastModified),
             etag: etag,
             range: range,
@@ -320,6 +336,6 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Output>(), 104);
+        assert_eq!(size_of::<Output>(), 120);
     }
 }

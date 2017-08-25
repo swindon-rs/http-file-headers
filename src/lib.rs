@@ -7,6 +7,7 @@ extern crate byteorder;
 extern crate digest_writer;
 extern crate generic_array;
 extern crate httpdate;
+extern crate mime_guess;
 extern crate typenum;
 
 mod conditionals;

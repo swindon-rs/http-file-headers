@@ -95,7 +95,7 @@ impl Input {
     /// Open files from filesystem
     ///
     /// **Must be run in disk thread**
-    pub fn probe_file<P: AsRef<Path>>(&self, path: P)
+    pub fn probe_file<P: AsRef<Path>>(&self, base_path: P)
         -> Result<Output, io::Error>
     {
         match self.mode {
@@ -103,7 +103,7 @@ impl Input {
             Mode::InvalidMethod => return Ok(Output::InvalidMethod),
             Mode::InvalidRange => return Ok(Output::InvalidRange),
         }
-        let path = path.as_ref().as_os_str();
+        let path = base_path.as_ref().as_os_str();
         let mut buf = OsString::with_capacity(path.len() + 3);
         for enc in self.encodings() {
             buf.clear();
@@ -115,7 +115,9 @@ impl Input {
                     if meta.is_dir() {
                         return Ok(Output::Directory);
                     }
-                    let head = match Head::from_meta(self, enc, &meta) {
+                    let head = match Head::from_meta(self, enc, &meta,
+                                                     base_path.as_ref())
+                    {
                         Err(output) => return Ok(output),
                         Ok(head) => head,
                     };
