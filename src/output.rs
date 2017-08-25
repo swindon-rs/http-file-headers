@@ -69,7 +69,7 @@ pub struct Head {
     content_length: u64,
     content_type: Option<ContentType>,
     last_modified: Option<LastModified>,
-    etag: Etag,
+    etag: Option<Etag>,
     range: Option<ContentRange>,
     not_modified: bool,
 }
@@ -122,7 +122,8 @@ impl<'a> Iterator for HeaderIter<'a> {
                         .map(|x| ("Last-Modified", x as &Display))
                 }
                 H::Etag => {
-                    Some(("ETag", &self.head.etag as &Display))
+                    self.head.etag.as_ref()
+                        .map(|x| ("ETag", x as &Display))
                 }
                 H::Encoding => {
                     if self.head.encoding != Encoding::Identity {
@@ -176,16 +177,24 @@ impl Head {
         metadata: &Metadata, ctype: &'static str)
         -> Result<Head, Output>
     {
-        let mod_time = metadata.modified().ok()
+        let mod_time = if inp.config.last_modified {
+            metadata.modified().ok()
             .and_then(|x| if x < UNIX_EPOCH + Duration::new(MIN_DATE, 0) {
                 None
             } else {
                 Some(x)
-            });
+            })
+        } else {
+            None
+        };
         let size = metadata.len();
-        let etag = Etag::from_metadata(metadata);
+        let etag = if inp.config.etag {
+            Some(Etag::from_metadata(metadata))
+        } else {
+            None
+        };
         if inp.if_none.len() > 0 {
-            if inp.if_none.iter().any(|x| x == &etag) {
+            if inp.if_none.iter().any(|x| Some(x) == etag.as_ref()) {
                 return Err(Output::NotModified(Head {
                     config: inp.config.clone(),
                     encoding: encoding,

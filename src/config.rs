@@ -14,6 +14,9 @@ pub struct Config {
     pub(crate) text_charset: Option<String>,
     pub(crate) index_files: Vec<String>,
     pub(crate) encoding_support: EncodingSupport,
+    pub(crate) content_type: bool,
+    pub(crate) etag: bool,
+    pub(crate) last_modified: bool,
 }
 
 impl Config {
@@ -24,11 +27,16 @@ impl Config {
     /// * `text_charset("utf-8")`
     /// * no index files
     /// * `encodings_on_text_files()`
+    /// * etags, last-modified and conditions based on them are enabled
+    /// * content-type is enabled
     pub fn new() -> Config {
         Config {
             text_charset: Some(String::from("utf-8")),
             index_files: Vec::new(),
             encoding_support: EncodingSupport::TextFiles,
+            content_type: true,
+            etag: true,
+            last_modified: true,
         }
     }
 
@@ -75,6 +83,29 @@ impl Config {
     /// Search for `.br` and `.gz` files for all files regardless of mime type
     pub fn encodings_on_all_files(&mut self) -> &mut Self {
         self.encoding_support = EncodingSupport::AllFiles;
+        self
+    }
+    /// Togggles generation of Content-Type header (so user can override)
+    ///
+    /// By default it's enabled
+    pub fn content_type(&mut self, value: bool) -> &mut Self {
+        self.content_type = value;
+        self
+    }
+    /// Toggles generation of Etag generation (and so `If-None-Match` too)
+    ///
+    /// By default it's enabled
+    pub fn etag(&mut self, value: bool) -> &mut Self {
+        self.etag = value;
+        self
+    }
+
+    /// Toggles generation of Last-Modified (and so `If-Modified-Since` too)
+    ///
+    /// Note: Last-Modified date is never sent if date is earlier than
+    /// 1990-01-01.
+    pub fn last_modified(&mut self, value: bool) -> &mut Self {
+        self.last_modified = value;
         self
     }
 

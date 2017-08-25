@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use accept_encoding::{AcceptEncoding, AcceptEncodingParser};
 use accept_encoding::{Iter as EncodingIter, Encoding};
-use config::Config;
+use config::{Config, EncodingSupport};
 use conditionals::{ModifiedParser, NoneMatchParser};
 use etag::Etag;
 use output::{Head, FileWrapper};
@@ -72,13 +72,19 @@ impl Input {
         let mut modified_parser = ModifiedParser::new();
         let mut none_match_parser = NoneMatchParser::new();
         for (key, val) in headers {
-            if key.eq_ignore_ascii_case("accept-encoding") {
+            if cfg.encoding_support != EncodingSupport::Never &&
+               key.eq_ignore_ascii_case("accept-encoding")
+            {
                 ae_parser.add_header(val);
             } else if key.eq_ignore_ascii_case("range") {
                 range_parser.add_header(val);
-            } else if key.eq_ignore_ascii_case("if-modified-since") {
+            } else if cfg.last_modified &&
+                      key.eq_ignore_ascii_case("if-modified-since")
+            {
                 modified_parser.add_header(val);
-            } else if key.eq_ignore_ascii_case("if-none-match") {
+            } else if cfg.etag &&
+                      key.eq_ignore_ascii_case("if-none-match")
+            {
                 none_match_parser.add_header(val);
             }
         }
