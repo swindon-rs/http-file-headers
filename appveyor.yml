@@ -18,8 +18,8 @@ environment:
 ### GNU Toolchains ###
 
   # Stable 64-bit GNU
-    - channel: stable
-      target: x86_64-pc-windows-gnu
+  #  - channel: stable
+  #    target: x86_64-pc-windows-gnu
 
 ### Allowed failures ###
 #
