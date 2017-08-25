@@ -10,6 +10,7 @@ extern crate tokio_io;
 
 use std::time::Duration;
 use std::path::{Path};
+use std::sync::Arc;
 
 use futures::{Future, Stream, Async};
 use futures::future::{ok, FutureResult, Either, loop_fn, Loop};
@@ -20,13 +21,14 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use tk_http::server;
 use tk_http::Status;
-use tk_http_file::{Input, Output};
+use tk_http_file::{Input, Output, Config};
 
 const MAX_SIMULTANEOUS_CONNECTIONS: usize = 500;
 const TIME_TO_WAIT_ON_ERROR: u64 = 100;
 
 lazy_static! {
     static ref POOL: CpuPool = CpuPool::new(8);
+    static ref CONFIG: Arc<Config> = Config::new().done();
 }
 
 type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,
@@ -137,7 +139,7 @@ impl<S: AsyncWrite + Send + 'static> server::Dispatcher<S> for Dispatcher {
     fn headers_received(&mut self, head: &server::Head)
         -> Result<Self::Codec, server::Error>
     {
-        let inp = Input::from_headers(head.method(), head.headers());
+        let inp = Input::from_headers(&*CONFIG, head.method(), head.headers());
         let path = Path::new("./public").join(head.path()
             .expect("only static requests expected") // fails on OPTIONS
             .trim_left_matches(|x| x == '/'));

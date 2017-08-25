@@ -4,8 +4,10 @@ use std::ascii::AsciiExt;
 use std::fs::{File};
 use std::path::Path;
 use std::ffi::OsString;
+use std::sync::Arc;
 
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
+use config::Config;
 use conditionals::{ModifiedParser, NoneMatchParser};
 use etag::Etag;
 use output::{Head, FileWrapper};
@@ -22,6 +24,7 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub struct Input {
+    pub(crate) config: Arc<Config>,
     pub(crate) mode: Mode,
     pub(crate) accept_encoding: AcceptEncoding,
     pub(crate) range: Option<Range>,
@@ -33,13 +36,15 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn from_headers<'x, I>(method: &str, headers: I) -> Input
+    pub fn from_headers<'x, I>(cfg: &Arc<Config>, method: &str, headers: I)
+        -> Input
         where I: Iterator<Item=(&'x str, &'x[u8])>
     {
         let mode = match method {
             "HEAD" => Mode::Head,
             "GET" => Mode::Get,
             _ => return Input {
+                config: cfg.clone(),
                 mode: Mode::InvalidMethod,
                 accept_encoding: AcceptEncoding::identity(),
                 range: None,
@@ -68,6 +73,7 @@ impl Input {
         let range = match range_parser.done() {
             Ok(range) => range,
             Err(()) => return Input {
+                config: cfg.clone(),
                 mode: Mode::InvalidRange,
                 accept_encoding: AcceptEncoding::identity(),
                 range: None,
@@ -79,6 +85,7 @@ impl Input {
             },
         };
         Input {
+            config: cfg.clone(),
             mode: mode,
             accept_encoding: ae_parser.done(),
             range: range,
@@ -153,6 +160,7 @@ mod test {
     #[test]
     fn traits() {
         let v = Input {
+            config: Config::new().done(),
             mode: Mode::Get,
             accept_encoding: AcceptEncodingParser::new().done(),
             range: None,
@@ -170,6 +178,6 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Input>(), 168);
+        assert_eq!(size_of::<Input>(), 176);
     }
 }

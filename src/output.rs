@@ -4,11 +4,13 @@ use std::fs::{Metadata, File};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::sync::Arc;
 
 use httpdate::fmt_http_date;
 use mime_guess::get_mime_type_str;
 
 use accept_encoding::Encoding;
+use config::Config;
 use input::{Input};
 use range::{Range, Slice};
 use etag::Etag;
@@ -26,6 +28,7 @@ const BYTES: &str = "bytes";
 const BYTES_PTR: &&str = &BYTES;
 
 struct LastModified(SystemTime);
+struct ContentType(&'static str, Arc<Config>);
 
 pub enum Output {
     NotFound,
@@ -39,9 +42,10 @@ pub enum Output {
 }
 
 pub struct Head {
+    config: Arc<Config>,
     encoding: Encoding,
     content_length: u64,
-    content_type: Option<&'static str>,
+    content_type: Option<ContentType>,
     last_modified: Option<LastModified>,
     etag: Etag,
     range: Option<ContentRange>,
@@ -154,6 +158,7 @@ impl Head {
         if inp.if_none.len() > 0 {
             if inp.if_none.iter().any(|x| x == &etag) {
                 return Err(Output::NotModified(Head {
+                    config: inp.config.clone(),
                     encoding: encoding,
                     content_length: 0, // don't need to send
                     content_type: None, // don't need to send
@@ -166,6 +171,7 @@ impl Head {
         } else if let Some(ref last_mod) = inp.if_modified {
             if mod_time.as_ref().map(|x| last_mod <= x).unwrap_or(false) {
                 return Err(Output::NotModified(Head {
+                    config: inp.config.clone(),
                     encoding: encoding,
                     content_length: 0, // don't need to send
                     content_type: None, // don't need to send
@@ -224,9 +230,10 @@ impl Head {
             .and_then(|x| get_mime_type_str(x))
             .unwrap_or("application/octed-stream");
         Ok(Head {
+            config: inp.config.clone(),
             encoding: encoding,
             content_length: clen,
-            content_type: Some(ctype),
+            content_type: Some(ContentType(ctype, inp.config.clone())),
             last_modified: mod_time.map(LastModified),
             etag: etag,
             range: range,
@@ -317,6 +324,20 @@ impl fmt::Display for ContentRange {
     }
 }
 
+impl fmt::Display for ContentType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0.starts_with("text/") {
+            if let Some(ref charset) = self.1.text_charset {
+                write!(f, "{}; charset={}", self.0, charset)
+            } else {
+                f.write_str(self.0)
+            }
+        } else {
+            f.write_str(self.0)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
@@ -336,6 +357,6 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Output>(), 120);
+        assert_eq!(size_of::<Output>(), 136);
     }
 }

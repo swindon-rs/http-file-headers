@@ -11,6 +11,7 @@ extern crate mime_guess;
 extern crate typenum;
 
 mod conditionals;
+mod config;
 mod etag;
 mod input;
 mod output;
@@ -18,5 +19,6 @@ mod range;
 mod accept_encoding;
 
 pub use input::Input;
-pub use output::Output;
+pub use config::Config;
+pub use output::{Output, Head, FileWrapper};
 pub use accept_encoding::{AcceptEncoding, Encoding, Iter as EncodingIter};
