@@ -173,8 +173,8 @@ impl Input {
     {
         let f = File::open(path)?;
         let meta = f.metadata()?;
-        if meta.is_dir() {
-            return Err(io::ErrorKind::NotFound.into());
+        if !meta.is_file() {
+            return Err(io::ErrorKind::PermissionDenied.into());
         }
         let head = match Head::from_meta(self, enc, &meta, ctype) {
             Err(output) => return Ok(output),
