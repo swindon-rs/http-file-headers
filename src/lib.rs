@@ -9,6 +9,7 @@ extern crate generic_array;
 extern crate httpdate;
 extern crate typenum;
 
+mod conditionals;
 mod etag;
 mod input;
 mod output;

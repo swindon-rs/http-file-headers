@@ -10,8 +10,8 @@ use typenum::U12;
 use byteorder::{WriteBytesExt, BigEndian};
 
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Etag([u8; 12]);
+#[derive(Clone, PartialEq, Eq)]
+pub struct Etag(pub(crate) [u8; 12]);
 
 
 impl Etag {
@@ -33,6 +33,15 @@ impl Etag {
         let mut value = [0u8; 12];
         value.copy_from_slice(&digest.result()[..]);
         return Etag(value);
+    }
+    pub(crate) fn decode_base64(slice: &[u8]) -> Result<Etag, ()> {
+        debug_assert!(slice.len() == 16);
+        let mut value = [0u8; 12];
+        decode4(&slice[..4], &mut value[..3])?;
+        decode4(&slice[4..8], &mut value[3..6])?;
+        decode4(&slice[8..12], &mut value[6..9])?;
+        decode4(&slice[12..], &mut value[9..])?;
+        Ok(Etag(value))
     }
 }
 
@@ -68,6 +77,36 @@ fn base64triple(src: &[u8], dest: &mut [u8]) {
     dest[3] = CHARS[(n >>  0) & 63];
 }
 
+#[inline(always)]
+fn decode_char(c: u8) -> Result<u8, ()> {
+    match c {
+        b'-' => Ok(62),
+        b'_' => Ok(63),
+        b'0'...b'9' => Ok(c - b'0' + 52),
+        b'A'...b'Z' => Ok(c - b'A'),
+        b'a'...b'z' => Ok(c - b'a' + 26),
+        _ => Err(()),
+    }
+}
+
+#[inline(always)]
+fn decode4(src: &[u8], dest: &mut [u8]) -> Result<(), ()> {
+    debug_assert!(src.len() == 4);
+    debug_assert!(dest.len() == 3);
+    let c1 = decode_char(src[0])?;
+    let c2 = decode_char(src[1])?;
+    let c3 = decode_char(src[2])?;
+    let c4 = decode_char(src[3])?;
+    let n = ((c1 as u32) << 18) |
+            ((c2 as u32) << 12) |
+            ((c3 as u32) <<  6) |
+            (c4 as u32);
+    dest[0] = ((n >> 16) & 0xFF) as u8;
+    dest[1] = ((n >>  8) & 0xFF) as u8;
+    dest[2] = ((n >>  0) & 0xFF) as u8;
+    Ok(())
+}
+
 impl fmt::Display for Etag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut result = [0u8; 16];
@@ -76,5 +115,23 @@ impl fmt::Display for Etag {
         base64triple(&self.0[6..9], &mut result[8..12]);
         base64triple(&self.0[9..], &mut result[12..]);
         write!(f, r#"W/"{}""#, unsafe { from_utf8_unchecked(&result[..]) })
+    }
+}
+
+impl fmt::Debug for Etag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Etag({})", self)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format() {
+        assert_eq!(format!("{}",
+            Etag([181, 130, 83, 244, 162, 84, 35, 66, 151, 216, 142, 106])),
+            String::from(r#"W/"tYJT9KJUI0KX2I5q""#));
     }
 }

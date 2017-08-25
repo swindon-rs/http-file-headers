@@ -6,9 +6,10 @@ use std::path::Path;
 use std::ffi::OsString;
 
 use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
-use range::{Range, RangeParser};
+use conditionals::{ModifiedParser, NoneMatchParser};
 use etag::Etag;
 use output::{Head, FileWrapper};
+use range::{Range, RangeParser};
 use {AcceptEncoding, Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,11 +52,17 @@ impl Input {
         };
         let mut ae_parser = AcceptEncodingParser::new();
         let mut range_parser = RangeParser::new();
+        let mut modified_parser = ModifiedParser::new();
+        let mut none_match_parser = NoneMatchParser::new();
         for (key, val) in headers {
             if key.eq_ignore_ascii_case("accept-encoding") {
                 ae_parser.add_header(val);
             } else if key.eq_ignore_ascii_case("range") {
                 range_parser.add_header(val);
+            } else if key.eq_ignore_ascii_case("if-modified-since") {
+                modified_parser.add_header(val);
+            } else if key.eq_ignore_ascii_case("if-none-match") {
+                none_match_parser.add_header(val);
             }
         }
         let range = match range_parser.done() {
@@ -77,9 +84,9 @@ impl Input {
             range: range,
             if_range: None,
             if_match: Vec::new(),
-            if_none: Vec::new(),
+            if_none: none_match_parser.done(),
             if_unmodified: None,
-            if_modified: None,
+            if_modified: modified_parser.done(),
         }
     }
     pub fn encodings(&self) -> EncodingIter {
