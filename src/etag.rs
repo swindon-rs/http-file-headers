@@ -57,7 +57,7 @@ fn extra<W: Write>(wr: &mut W, metadata: &Metadata) {
 }
 
 #[cfg(not(unix))]
-fn extra<W: Write>(_: &mut W, _: &metadata) {
+fn extra<W: Write>(_: &mut W, _: &Metadata) {
 }
 
 #[inline(always)]
