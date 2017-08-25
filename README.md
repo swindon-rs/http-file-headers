@@ -7,13 +7,13 @@ Http-file-headers Crate
 [Crate](https://crates.io/crates/http-file-headers)
 
 
-A framwork-agnostic library that parses file related headers from HTTP request
+A framework-agnostic library that parses file-related headers from HTTP request
 and helps serving files including support of:
 
 * `ETag`, `If-None-Match`
 * `Last-Modified`, `If-Modified-Since`
 * `Accept-Ranges`, `Range`, `Content-Range`
-* `Content-Type` using mime_guess_
+* `Content-Type` using [mime_guess][2]
 * `Accept-Encoding` for serving compressed (gzip and brotli) files
 * Serving `index.html` or similar directory indexes
 
@@ -22,7 +22,7 @@ it's usage is quite verbose (see [example][1]). Still it does most of the
 complex work internally and is easily adapted to different needs.
 
 Here are just few things that [example in < 200 LoCs][1] shows:
- 
+
 1. [Tokio](https://tokio.rs) for asynchronous stuff
 2. [Tk-http](https://github.com/swindon-rs/tk-http) serving HTTP
 3. [Futures-cpupool](https://crates.io/crates/futures-cpupool) for
@@ -31,6 +31,7 @@ Here are just few things that [example in < 200 LoCs][1] shows:
 5. Customizing path where file are served from
 
 [1]: https://github.com/swindon-rs/http-file-headers/tree/master/examples/serve_dir.rs
+[2]: https://github.com/crates/mime_guess
 
 
 License
