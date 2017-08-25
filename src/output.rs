@@ -2,12 +2,10 @@ use std::cmp::min;
 use std::fmt::{self, Display};
 use std::fs::{Metadata, File};
 use std::io::{self, Read, Write, Seek, SeekFrom};
-use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::sync::Arc;
 
 use httpdate::fmt_http_date;
-use mime_guess::get_mime_type_str;
 
 use accept_encoding::Encoding;
 use config::Config;
@@ -175,7 +173,7 @@ impl Head {
         self.not_modified
     }
     pub(crate) fn from_meta(inp: &Input, encoding: Encoding,
-        metadata: &Metadata, path: &Path)
+        metadata: &Metadata, ctype: &'static str)
         -> Result<Head, Output>
     {
         let mod_time = metadata.modified().ok()
@@ -256,10 +254,6 @@ impl Head {
             Some(ref rng) => rng.end - rng.start + 1,
             None => size,
         };
-        let ctype = path.extension()
-            .and_then(|x| x.to_str())
-            .and_then(|x| get_mime_type_str(x))
-            .unwrap_or("application/octed-stream");
         Ok(Head {
             config: inp.config.clone(),
             encoding: encoding,

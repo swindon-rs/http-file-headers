@@ -28,7 +28,9 @@ const TIME_TO_WAIT_ON_ERROR: u64 = 100;
 
 lazy_static! {
     static ref POOL: CpuPool = CpuPool::new(8);
-    static ref CONFIG: Arc<Config> = Config::new().done();
+    static ref CONFIG: Arc<Config> = Config::new()
+        .add_index_file("index.html")
+        .done();
 }
 
 type ResponseFuture<S> = Box<Future<Item=server::EncoderDone<S>,

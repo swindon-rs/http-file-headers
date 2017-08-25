@@ -7,12 +7,13 @@ use std::ffi::OsString;
 use std::sync::Arc;
 
 use accept_encoding::{AcceptEncoding, AcceptEncodingParser};
-use accept_encoding::{Iter as EncodingIter};
+use accept_encoding::{Iter as EncodingIter, Encoding};
 use config::Config;
 use conditionals::{ModifiedParser, NoneMatchParser};
 use etag::Etag;
 use output::{Head, FileWrapper};
 use range::{Range, RangeParser};
+use mime_guess::get_mime_type_str;
 use {Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,10 @@ pub enum Mode {
     Get,
     InvalidMethod,
     InvalidRange,
+}
+
+pub fn is_text_file(val: &str) -> bool {
+    return val.starts_with("text/") || val == "application/javascript"
 }
 
 /// The structure represents parsed input headers
@@ -118,41 +123,85 @@ impl Input {
             Mode::InvalidMethod => return Ok(Output::InvalidMethod),
             Mode::InvalidRange => return Ok(Output::InvalidRange),
         }
-        let path = base_path.as_ref().as_os_str();
+        let base_path = base_path.as_ref();
+        match base_path.metadata() {
+            Ok(ref m) if m.is_dir() => self.try_dir(base_path),
+            Ok(_) => self.try_file(base_path),
+            Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+                return Ok(Output::NotFound);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    fn try_dir(&self, base_path: &Path) -> Result<Output, io::Error> {
+        let mut buf = base_path.to_path_buf();
+        for name in &self.config.index_files {
+            buf.push(name);
+            if buf.exists() {
+                return self.try_file(&buf);
+            }
+            buf.pop();
+        }
+        Ok(Output::Directory)
+    }
+    fn try_file(&self, base_path: &Path) -> Result<Output, io::Error> {
+        use config::EncodingSupport as E;
+        let ctype = base_path.extension()
+            .and_then(|x| x.to_str())
+            .and_then(|x| get_mime_type_str(x))
+            .unwrap_or("application/octed-stream");
+        let encodings = match self.config.encoding_support {
+            E::Never => false,
+            E::TextFiles => is_text_file(ctype),
+            E::AllFiles => true,
+        };
+        if encodings {
+            return self.try_encodings(base_path, ctype);
+        } else {
+            return self.try_path(base_path, Encoding::Identity, ctype);
+        }
+    }
+
+    fn try_path(&self, path: &Path, enc: Encoding, ctype: &'static str)
+        -> Result<Output, io::Error>
+    {
+        let f = File::open(path)?;
+        let meta = f.metadata()?;
+        if meta.is_dir() {
+            return Err(io::ErrorKind::NotFound.into());
+        }
+        let head = match Head::from_meta(self, enc, &meta, ctype) {
+            Err(output) => return Ok(output),
+            Ok(head) => head,
+        };
+        match self.mode {
+            Mode::InvalidMethod => unreachable!(),
+            Mode::InvalidRange => unreachable!(),
+            Mode::Head => Ok(Output::FileHead(head)),
+            Mode::Get => Ok(Output::File(FileWrapper::new(head, f)?)),
+        }
+    }
+
+    fn try_encodings(&self, base_path: &Path, ctype: &'static str)
+        -> Result<Output, io::Error>
+    {
+        let path = base_path.as_os_str();
         let mut buf = OsString::with_capacity(path.len() + 3);
         for enc in self.encodings() {
             buf.clear();
             buf.push(path);
             buf.push(enc.suffix());
             let path = Path::new(&buf);
-            match File::open(path).and_then(|f| f.metadata().map(|m| (f, m))) {
-                Ok((f, meta)) => {
-                    if meta.is_dir() {
-                        return Ok(Output::Directory);
-                    }
-                    let head = match Head::from_meta(self, enc, &meta,
-                                                     base_path.as_ref())
-                    {
-                        Err(output) => return Ok(output),
-                        Ok(head) => head,
-                    };
-                    match self.mode {
-                        Mode::InvalidMethod => unreachable!(),
-                        Mode::InvalidRange => unreachable!(),
-                        Mode::Head => return Ok(Output::FileHead(head)),
-                        Mode::Get => {
-                            return Ok(Output::File(
-                                FileWrapper::new(head, f)?));
-                        }
-                    }
-                }
-                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                    continue;
-                }
+            match self.try_path(&path, enc, ctype) {
+                Ok(x) => return Ok(x),
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound
+                => continue,
                 Err(e) => return Err(e),
             }
         }
-        return Ok(Output::NotFound);
+        // Tecnically it can happen only if file was removed while
+        // we are looking for encodings
+        Ok(Output::NotFound)
     }
 }
 
