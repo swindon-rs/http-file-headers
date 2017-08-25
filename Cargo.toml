@@ -1,15 +1,15 @@
 [package]
-name = "tk-http-file"
+name = "http-file-headers"
 description = """
-    A file serving library for tk-http. It makes very easy to write
-    full-featured static file server (incl. conditional request,
-    range requests, etc)
+    A framework-agnostic helper library for serving static files.
+    It makes very easy to write full-featured static file server
+    (incl. conditional headers, encodings, range requests, etc)
 """
 license = "MIT/Apache-2.0"
 readme = "README.rst"
-keywords = ["http", "serve", "filesystem", "file"]
-homepage = "http://github.com/swindon-rs/tk-http-file"
-documentation = "http://docs.rs/tk-http-file"
+keywords = ["http", "serve", "filesystem", "file", "headers"]
+homepage = "http://github.com/swindon-rs/http-file-headers"
+documentation = "http://docs.rs/http-file-headers"
 version = "0.1.0"
 authors = ["paul@colomiets.name"]
 

@@ -2,11 +2,11 @@
 //!
 //! See [examples][1] for full example of how to use it.
 //!
-//! [Github](https://github.com/swindon-rs/tk-http-file) |
+//! [Github](https://github.com/swindon-rs/http-file-headers) |
 //! [Examples][1] |
-//! [Crate](https://crates.io/crates/tk-http-file)
+//! [Crate](https://crates.io/crates/http-file-headers)
 //!
-//! [1]: https://github.com/swindon-rs/tree/master/examples
+//! [1]: https://github.com/swindon-rs/http-file-headers/tree/master/examples
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
 

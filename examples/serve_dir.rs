@@ -1,7 +1,7 @@
 extern crate futures;
 extern crate futures_cpupool;
 extern crate tk_http;
-extern crate tk_http_file;
+extern crate http_file_headers;
 extern crate tk_listen;
 extern crate tokio_core;
 extern crate tokio_io;
@@ -21,7 +21,7 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use tk_http::server;
 use tk_http::Status;
-use tk_http_file::{Input, Output, Config};
+use http_file_headers::{Input, Output, Config};
 
 const MAX_SIMULTANEOUS_CONNECTIONS: usize = 500;
 const TIME_TO_WAIT_ON_ERROR: u64 = 100;
@@ -43,12 +43,18 @@ struct Codec {
 struct Dispatcher {
 }
 
+fn common_headers<S>(e: &mut server::Encoder<S>) {
+    e.format_header("Server",
+        format_args!("serve_dir/{}", env!("CARGO_PKG_VERSION"))).unwrap();
+}
+
 fn respond_error<S: 'static>(status: Status, mut e: server::Encoder<S>)
     -> FutureResult<server::EncoderDone<S>, server::Error>
 {
     let body = format!("{} {}", status.code(), status.reason());
     e.status(status);
     e.add_length(body.as_bytes().len() as u64).unwrap();
+    common_headers(&mut e);
     if e.done_headers().unwrap() {
         e.write_body(body.as_bytes());
     }
@@ -78,6 +84,7 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                         e.status(Status::Ok);
                     }
                     e.add_length(outf.content_length()).unwrap();
+                    common_headers(&mut e);
                     for (name, val) in outf.headers() {
                         e.format_header(name, val).unwrap();
                     }
@@ -111,6 +118,7 @@ impl<S: AsyncWrite + Send + 'static> server::Codec<S> for Codec {
                         e.status(Status::Ok);
                         e.add_length(head.content_length()).unwrap();
                     }
+                    common_headers(&mut e);
                     for (name, val) in head.headers() {
                         e.format_header(name, val).unwrap();
                     }
@@ -143,7 +151,7 @@ impl<S: AsyncWrite + Send + 'static> server::Dispatcher<S> for Dispatcher {
     {
         let inp = Input::from_headers(&*CONFIG, head.method(), head.headers());
         let path = Path::new("./public").join(head.path()
-            .expect("only static requests expected") // fails on OPTIONS
+            .expect("only static requests expected") // fails on OPTIONS *
             .trim_left_matches(|x| x == '/'));
         let fut = POOL.spawn_fn(move || {
             inp.probe_file(&path).map_err(|e| {
