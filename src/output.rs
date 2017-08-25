@@ -153,6 +153,17 @@ impl Head {
                     not_modified: true,
                 }))
             }
+        } else if let Some(ref last_mod) = inp.if_modified {
+            if mod_time.as_ref().map(|x| last_mod <= x).unwrap_or(false) {
+                return Err(Output::NotModified(Head {
+                    encoding: encoding,
+                    content_length: 0,
+                    last_modified: mod_time.map(LastModified),
+                    etag: etag,
+                    range: None,
+                    not_modified: true,
+                }))
+            }
         }
         let range = match inp.range {
             Some(Range::SingleRangeOfBytes(Slice::FromTo(s, e))) => {
