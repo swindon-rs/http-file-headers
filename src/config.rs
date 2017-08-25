@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 
+/// A configuration with the builder interface
 #[derive(Clone, Debug)]
 pub struct Config {
     pub(crate) text_charset: Option<String>,
@@ -30,6 +31,7 @@ impl Config {
         self.text_charset = None;
         self
     }
+    /// Finalize configuration and wrap into an Arc
     pub fn done(&self) -> Arc<Config> {
         Arc::new(self.clone())
     }

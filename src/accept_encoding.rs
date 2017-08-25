@@ -2,10 +2,19 @@ use std::fmt;
 use std::str::from_utf8;
 use std::slice;
 
+/// Single encoding that might be accepted by user agent
+///
+/// Note: We only support fixed set of encodings, the most useful ones. We
+/// have no plans on adding open-ended encodings because it doesn't make
+/// much sense, still we may add some encoding in future, based on it's
+/// popularity and browser support.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Encoding {
+    /// Brotli encoding (trasferred as "br", and has same extension)
     Brotli,
+    /// Gzip encoding (trasferred as "gzip", and extension ".gz")
     Gzip,
+    /// Identity means no encoding
     Identity,
     #[doc(hidden)]
     __Nonexhaustive,
@@ -21,17 +30,22 @@ pub struct AcceptEncoding {
 /// It drops unaccepted encodings and returns only supported ones
 pub struct AcceptEncodingParser {
     buf: Vec<(Encoding, u16 /*0..1000*/)>,
-    allow_identity: bool,
+    /// TODO(tailhook) it's unclear what to do with `allow_any`
     allow_any: bool,
 }
 
 /// Iterator over encodings in preferred order
+///
+/// You may create one using `Input::encodings()`
+#[derive(Debug)]
 pub struct Iter<'a> {
     slice: slice::Iter<'a, Encoding>,
     identity: bool,
 }
 
 impl Encoding {
+    /// Returns default filename suffix used for this encoding when reading
+    /// a file from a filesystem.
     pub fn suffix(&self) -> &'static str {
         use self::Encoding::*;
         match *self {
@@ -123,7 +137,6 @@ impl AcceptEncodingParser {
     pub fn new() -> AcceptEncodingParser {
         AcceptEncodingParser {
             buf: Vec::new(),
-            allow_identity: true,
             allow_any: true,
         }
     }

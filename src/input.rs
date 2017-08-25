@@ -6,13 +6,14 @@ use std::path::Path;
 use std::ffi::OsString;
 use std::sync::Arc;
 
-use accept_encoding::{AcceptEncodingParser, Iter as EncodingIter};
+use accept_encoding::{AcceptEncoding, AcceptEncodingParser};
+use accept_encoding::{Iter as EncodingIter};
 use config::Config;
 use conditionals::{ModifiedParser, NoneMatchParser};
 use etag::Etag;
 use output::{Head, FileWrapper};
 use range::{Range, RangeParser};
-use {AcceptEncoding, Output};
+use {Output};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -22,6 +23,11 @@ pub enum Mode {
     InvalidRange,
 }
 
+/// The structure represents parsed input headers
+///
+/// Create it with `Input::from_headers`, and make output structure
+/// using `Input::probe_file`. Note: the latter should be run in disk
+/// thread.
 #[derive(Debug, Clone)]
 pub struct Input {
     pub(crate) config: Arc<Config>,
@@ -36,6 +42,7 @@ pub struct Input {
 }
 
 impl Input {
+    /// A constructor for `Input` object
     pub fn from_headers<'x, I>(cfg: &Arc<Config>, method: &str, headers: I)
         -> Input
         where I: Iterator<Item=(&'x str, &'x[u8])>
@@ -96,6 +103,7 @@ impl Input {
             if_modified: modified_parser.done(),
         }
     }
+    /// Iterate over encodings accepted by user-agent in preferred order
     pub fn encodings(&self) -> EncodingIter {
         self.accept_encoding.iter()
     }

@@ -27,20 +27,44 @@ const MIN_DATE: u64 = 631152000;
 const BYTES: &str = "bytes";
 const BYTES_PTR: &&str = &BYTES;
 
+
+#[derive(Debug)]
 struct LastModified(SystemTime);
+
+#[derive(Debug)]
 struct ContentType(&'static str, Arc<Config>);
 
+/// This enum represents all the information needed to form response for
+/// the HTTP request
+///
+/// Variants of this structure represent different modes of responding on
+/// request.
+#[derive(Debug)]
 pub enum Output {
+    /// File not found
     NotFound,
+    /// File was requested using `HEAD` method
     FileHead(Head),
+    /// File is not modified, should return 304
+    ///
+    /// This might be returned if there is one of `If-None-Match`
+    /// or `If-Modified-Since`
     NotModified(Head),
+    /// Normal file was requested using `GET` method
     File(FileWrapper),
+    /// The `GET` file request includes `Range` field, and range is
+    /// contiguous
     FileRange(FileWrapper),
+    /// The matching path is a directory
     Directory,
+    /// Invalid method was requested
     InvalidMethod,
+    /// Invalid `Range` header in request, should return 416
     InvalidRange,
 }
 
+/// All the metadata of for the response headers
+#[derive(Debug)]
 pub struct Head {
     config: Arc<Config>,
     encoding: Encoding,
@@ -52,19 +76,23 @@ pub struct Head {
     not_modified: bool,
 }
 
+#[derive(Debug)]
 pub struct ContentRange {
     start: u64,
     end: u64,
     file_size: u64,
 }
 
+/// Structure that contains all the metadata for response headers and
+/// the file which will be sent in response body.
+#[derive(Debug)]
 pub struct FileWrapper {
     head: Head,
     file: File,
     bytes_left: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum HeaderIterState {
     LastModified,
     Etag,
@@ -78,6 +106,7 @@ enum HeaderIterState {
     Done,
 }
 
+#[derive(Debug)]
 pub struct HeaderIter<'a> {
     head: &'a Head,
     state: HeaderIterState,
@@ -137,9 +166,11 @@ impl<'a> Iterator for HeaderIter<'a> {
 }
 
 impl Head {
+    /// Returns true if response contains partial content (206)
     pub fn is_partial(&self) -> bool {
         self.range.is_some()
     }
+    /// Returns true if response is skipped because cache is fresh (304)
     pub fn is_not_modified(&self) -> bool {
         self.not_modified
     }
@@ -240,9 +271,14 @@ impl Head {
             not_modified: false,
         })
     }
+    /// Returns the value of `Content-Length` header that should be sent
     pub fn content_length(&self) -> u64 {
         self.content_length
     }
+    /// Returns the iterator over headers to send in response
+    ///
+    /// Note: this does not include `Content-Length` header,
+    /// use `content_length()` method explicitly.
     pub fn headers(&self) -> HeaderIter {
         HeaderIter {
             head: self,
@@ -252,7 +288,8 @@ impl Head {
 }
 
 impl FileWrapper {
-    pub fn new(head: Head, mut file: File) -> Result<FileWrapper, io::Error>
+    pub(crate) fn new(head: Head, mut file: File)
+        -> Result<FileWrapper, io::Error>
     {
         let nbytes = match head.range {
             Some(ContentRange { start, end, .. }) => {
@@ -269,12 +306,18 @@ impl FileWrapper {
             bytes_left: nbytes,
         })
     }
+    /// Returns true if response contains partial content (206)
     pub fn is_partial(&self) -> bool {
         self.head.range.is_some()
     }
+    /// Returns the value of `Content-Length` header that should be sent
     pub fn content_length(&self) -> u64 {
         self.head.content_length
     }
+    /// Returns the iterator over headers to send in response
+    ///
+    /// Note: this does not include `Content-Length` header,
+    /// use `content_length()` method explicitly.
     pub fn headers(&self) -> HeaderIter {
         self.head.headers()
     }
