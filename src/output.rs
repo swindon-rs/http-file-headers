@@ -404,7 +404,7 @@ mod test {
         self_contained(&v);
     }
 
-    #[cfg(target_arch="x86_64")]
+    #[cfg(all(target_arch="x86_64", target_os="linux"))]
     #[test]
     fn size() {
         assert_eq!(size_of::<Output>(), 136);
