@@ -9,7 +9,7 @@ use httpdate::fmt_http_date;
 
 use accept_encoding::Encoding;
 use config::Config;
-use input::{Input};
+use input::{Input, is_text_file};
 use range::{Range, Slice};
 use etag::Etag;
 
@@ -363,7 +363,7 @@ impl fmt::Display for ContentRange {
 
 impl fmt::Display for ContentType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.0.starts_with("text/") {
+        if is_text_file(self.0) {
             if let Some(ref charset) = self.1.text_charset {
                 write!(f, "{}; charset={}", self.0, charset)
             } else {
