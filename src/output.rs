@@ -2,10 +2,10 @@ use std::cmp::min;
 use std::fmt::{self, Display};
 use std::fs::{Metadata, File};
 use std::io::{self, Read, Write, Seek, SeekFrom};
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{UNIX_EPOCH, Duration};
 use std::sync::Arc;
 
-use httpdate::fmt_http_date;
+use httpdate::HttpDate;
 
 use accept_encoding::Encoding;
 use config::Config;
@@ -25,9 +25,6 @@ const MIN_DATE: u64 = 631152000;
 const BYTES: &str = "bytes";
 const BYTES_PTR: &&str = &BYTES;
 
-
-#[derive(Debug)]
-struct LastModified(SystemTime);
 
 #[derive(Debug)]
 struct ContentType(&'static str, Arc<Config>);
@@ -68,7 +65,7 @@ pub struct Head {
     encoding: Encoding,
     content_length: u64,
     content_type: Option<ContentType>,
-    last_modified: Option<LastModified>,
+    last_modified: Option<HttpDate>,
     etag: Option<Etag>,
     range: Option<ContentRange>,
     not_modified: bool,
@@ -200,7 +197,7 @@ impl Head {
                     encoding: encoding,
                     content_length: 0, // don't need to send
                     content_type: None, // don't need to send
-                    last_modified: mod_time.map(LastModified),
+                    last_modified: mod_time.map(Into::into),
                     etag: etag,
                     range: None,
                     not_modified: true,
@@ -213,7 +210,7 @@ impl Head {
                     encoding: encoding,
                     content_length: 0, // don't need to send
                     content_type: None, // don't need to send
-                    last_modified: mod_time.map(LastModified),
+                    last_modified: mod_time.map(Into::into),
                     etag: etag,
                     range: None,
                     not_modified: true,
@@ -272,7 +269,7 @@ impl Head {
             } else {
                 None
             },
-            last_modified: mod_time.map(LastModified),
+            last_modified: mod_time.map(Into::into),
             etag: etag,
             range: range,
             not_modified: false,
@@ -362,12 +359,6 @@ impl FileWrapper {
 impl Output {
 }
 
-impl fmt::Display for LastModified {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&fmt_http_date(self.0))
-    }
-}
-
 impl fmt::Display for ContentRange {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}-{}/{}", self.start, self.end, self.file_size)
@@ -407,6 +398,6 @@ mod test {
     #[cfg(all(target_arch="x86_64", target_os="linux"))]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Output>(), 136);
+        assert_eq!(size_of::<Output>(), 128);
     }
 }
