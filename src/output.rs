@@ -361,7 +361,7 @@ impl Output {
 
 impl fmt::Display for ContentRange {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}-{}/{}", self.start, self.end, self.file_size)
+        write!(f, "bytes {}-{}/{}", self.start, self.end, self.file_size)
     }
 }
 
@@ -399,5 +399,14 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<Output>(), 128);
+    }
+
+    #[test]
+    fn content_range() {
+        assert_eq!(format!("{}", ContentRange {
+            start: 10,
+            end: 100,
+            file_size: 1000,
+        }), "bytes 10-100/1000");
     }
 }
