@@ -240,7 +240,7 @@ mod test {
     #[cfg(all(target_arch="x86_64", target_os="linux"))]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Input>(), 176);
+        assert!(size_of::<Range>() <= 24);
+        assert!(size_of::<Input>() <= 176);
     }
 }

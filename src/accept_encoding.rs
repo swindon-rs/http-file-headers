@@ -202,7 +202,7 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Option<Encoding>>(), 2);
+        assert!(size_of::<Option<Encoding>>() <= 2);
     }
 
     #[test]

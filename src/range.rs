@@ -150,9 +150,9 @@ mod test {
     #[cfg(target_arch="x86_64")]
     #[test]
     fn size() {
-        assert_eq!(size_of::<Option<Range>>(), 32);
-        assert_eq!(size_of::<Range>(), 24);
-        assert_eq!(size_of::<Slice>(), 24);
+        assert!(size_of::<Option<Range>>() <= 32);
+        assert!(size_of::<Range>() <= 24);
+        assert!(size_of::<Slice>() <= 24);
     }
 
     #[test]
