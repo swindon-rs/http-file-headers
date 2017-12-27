@@ -71,7 +71,7 @@ pub struct Head {
     not_modified: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ContentRange {
     start: u64,
     end: u64,
@@ -217,49 +217,7 @@ impl Head {
                 }))
             }
         }
-        let range = match inp.range {
-            Some(Range::SingleRangeOfBytes(Slice::FromTo(s, e))) => {
-                if s >= size {
-                    return Err(Output::InvalidRange);
-                } else {
-                    let nbytes = min(size - s, (e - s).saturating_add(1));
-                    Some(ContentRange {
-                        start: s,
-                        end: s + nbytes - 1,
-                        file_size: size,
-                    })
-                }
-            }
-            Some(Range::SingleRangeOfBytes(Slice::Last(mut nbytes))) => {
-                let start = if nbytes > size {
-                    nbytes = size;
-                    0
-                } else {
-                    size - nbytes
-                };
-                Some(ContentRange {
-                    start: start,
-                    end: start + nbytes - 1,
-                    file_size: size,
-                })
-            }
-            Some(Range::SingleRangeOfBytes(Slice::AllFrom(start))) => {
-                if start >= size {
-                    return Err(Output::InvalidRange);
-                } else {
-                    Some(ContentRange {
-                        start: start,
-                        end: size - 1,
-                        file_size: size,
-                    })
-                }
-            }
-            None => None,
-        };
-        let clen = match range {
-            Some(ref rng) => rng.end - rng.start + 1,
-            None => size,
-        };
+        let (range, clen) = resolve_range(&inp.range, size)?;
         Ok(Head {
             config: inp.config.clone(),
             encoding: encoding,
@@ -361,7 +319,11 @@ impl Output {
 
 impl fmt::Display for ContentRange {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "bytes {}-{}/{}", self.start, self.end, self.file_size)
+        if self.file_size == 0 {
+            write!(f, "bytes */0")
+        } else {
+            write!(f, "bytes {}-{}/{}", self.start, self.end, self.file_size)
+        }
     }
 }
 
@@ -377,6 +339,55 @@ impl fmt::Display for ContentType {
             f.write_str(self.0)
         }
     }
+}
+
+fn resolve_range(inp_range: &Option<Range>, size: u64)
+    -> Result<(Option<ContentRange>, u64), Output>
+{
+    let range = match *inp_range {
+        Some(Range::SingleRangeOfBytes(Slice::FromTo(s, e))) => {
+            if s >= size {
+                return Err(Output::InvalidRange);
+            } else {
+                let nbytes = min(size - s, (e - s).saturating_add(1));
+                Some(ContentRange {
+                    start: s,
+                    end: s + nbytes - 1,
+                    file_size: size,
+                })
+            }
+        }
+        Some(Range::SingleRangeOfBytes(Slice::Last(mut nbytes))) => {
+            let start = if nbytes > size {
+                nbytes = size;
+                0
+            } else {
+                size - nbytes
+            };
+            Some(ContentRange {
+                start: start,
+                end: (start + nbytes).saturating_sub(1),
+                file_size: size,
+            })
+        }
+        Some(Range::SingleRangeOfBytes(Slice::AllFrom(start))) => {
+            if start >= size {
+                return Err(Output::InvalidRange);
+            } else {
+                Some(ContentRange {
+                    start: start,
+                    end: size - 1,
+                    file_size: size,
+                })
+            }
+        }
+        None => None,
+    };
+    let clen = match range {
+        Some(ref rng) => rng.end - rng.start + 1,
+        None => size,
+    };
+    return Ok((range, clen));
 }
 
 #[cfg(test)]
@@ -402,11 +413,64 @@ mod test {
     }
 
     #[test]
-    fn content_range() {
+    fn format_range() {
         assert_eq!(format!("{}", ContentRange {
             start: 10,
             end: 100,
             file_size: 1000,
         }), "bytes 10-100/1000");
+    }
+
+    #[test]
+    fn format_zero_file_size() {
+        assert_eq!(format!("{}", ContentRange {
+            start: 0,
+            end: 0,
+            file_size: 0,
+        }), "bytes */0");
+    }
+
+    fn last(num: u64) -> Range {
+        Range::SingleRangeOfBytes(Slice::Last(num))
+    }
+
+    fn from(num: u64) -> Range {
+        Range::SingleRangeOfBytes(Slice::AllFrom(num))
+    }
+
+    fn range(from: u64, to: u64) -> Range {
+        Range::SingleRangeOfBytes(Slice::FromTo(from, to))
+    }
+
+    fn res(start: u64, end: u64, size: u64) -> ContentRange {
+        ContentRange {
+            start: start,
+            end: end,
+            file_size: size,
+        }
+    }
+    fn resolve(rng: Range, file_size: u64) -> ContentRange {
+        resolve_range(&Some(rng), file_size).unwrap().0.unwrap()
+    }
+
+    #[test]
+    fn range_on_zero_length() {
+        assert_eq!(resolve(last(100), 0), res(0, 0, 0));
+        resolve_range(&Some(from(100)), 0).unwrap_err();
+        resolve_range(&Some(range(0, 100)), 0).unwrap_err();
+    }
+
+    #[test]
+    fn range_on_short() {
+        assert_eq!(resolve(last(1000), 100), res(0, 99, 100));
+        resolve_range(&Some(range(1000, 2000)), 100).unwrap_err();
+        assert_eq!(resolve(range(10, 1000), 100), res(10, 99, 100));
+    }
+
+    #[test]
+    fn norm_ranges() {
+        assert_eq!(resolve(last(1000), 10000), res(9000, 9999, 10000));
+        assert_eq!(resolve(range(100, 1000), 10000), res(100, 1000, 10000));
+        assert_eq!(resolve(from(777), 10000), res(777, 9999, 10000));
     }
 }
