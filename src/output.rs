@@ -384,6 +384,7 @@ fn resolve_range(inp_range: &Option<Range>, size: u64)
         None => None,
     };
     let clen = match range {
+        Some(_) if size == 0 => 0,
         Some(ref rng) => rng.end - rng.start + 1,
         None => size,
     };
@@ -452,10 +453,14 @@ mod test {
     fn resolve(rng: Range, file_size: u64) -> ContentRange {
         resolve_range(&Some(rng), file_size).unwrap().0.unwrap()
     }
+    fn resolve_clen(rng: Range, file_size: u64) -> u64 {
+        resolve_range(&Some(rng), file_size).unwrap().1
+    }
 
     #[test]
     fn range_on_zero_length() {
         assert_eq!(resolve(last(100), 0), res(0, 0, 0));
+        assert_eq!(resolve_clen(last(100), 0), 0);
         resolve_range(&Some(from(100)), 0).unwrap_err();
         resolve_range(&Some(range(0, 100)), 0).unwrap_err();
     }
@@ -463,8 +468,10 @@ mod test {
     #[test]
     fn range_on_short() {
         assert_eq!(resolve(last(1000), 100), res(0, 99, 100));
+        assert_eq!(resolve_clen(last(1000), 100), 100);
         resolve_range(&Some(range(1000, 2000)), 100).unwrap_err();
         assert_eq!(resolve(range(10, 1000), 100), res(10, 99, 100));
+        assert_eq!(resolve_clen(range(10, 1000), 100), 90);
     }
 
     #[test]
