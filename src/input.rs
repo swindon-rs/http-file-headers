@@ -1,6 +1,5 @@
 use std::io;
 use std::time::SystemTime;
-use std::ascii::AsciiExt;
 use std::fs::{File};
 use std::path::Path;
 use std::ffi::OsString;

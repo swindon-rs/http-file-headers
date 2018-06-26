@@ -4,9 +4,8 @@ use std::fmt;
 use std::time::{Duration, UNIX_EPOCH};
 use std::str::from_utf8_unchecked;
 
-use blake2::{Blake2b, Digest};
+use blake2::{Blake2b, Digest, digest::VariableOutput};
 use digest_writer::Writer;
-use typenum::U12;
 use byteorder::{WriteBytesExt, BigEndian};
 
 
@@ -16,7 +15,8 @@ pub struct Etag(pub(crate) [u8; 12]);
 
 impl Etag {
     pub fn from_metadata(metadata: &Metadata) -> Etag {
-        let mut wr = Writer::new(Blake2b::<U12>::new());
+        let mut wr = Writer::new(<Blake2b as VariableOutput>::new(12)
+            .expect("blake2b supports 12 bytes"));
         wr.write_u64::<BigEndian>(metadata.len()).unwrap();
         let fmod = metadata.modified().ok()
             .and_then(|x| x.duration_since(UNIX_EPOCH).ok())
