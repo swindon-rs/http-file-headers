@@ -11,7 +11,7 @@ keywords = ["http", "serve", "filesystem", "file", "headers"]
 homepage = "http://github.com/swindon-rs/http-file-headers"
 documentation = "http://docs.rs/http-file-headers"
 version = "0.1.6"
-authors = ["paul@colomiets.name"]
+authors = ["Paul Colomiets <paul@colomiets.name>"]
 
 [dependencies]
 httpdate = "0.3.2"
