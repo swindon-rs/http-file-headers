@@ -31,7 +31,7 @@ impl Etag {
         extra(&mut wr, metadata);
         let digest = wr.into_inner();
         let mut value = [0u8; 12];
-        value.copy_from_slice(&digest.result()[..]);
+        digest.variable_result(&mut value[..]);
         return Etag(value);
     }
     pub(crate) fn decode_base64(slice: &[u8]) -> Result<Etag, ()> {
